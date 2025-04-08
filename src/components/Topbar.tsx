@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, Settings, Users, Building } from 'lucide-react';
+import { Bell, Settings, Users, Building, ChevronRight } from 'lucide-react';
 import { UserDropdown } from './UserDropdown';
 import { useNavigate } from 'react-router-dom';
 
 export const Topbar = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isFinanceOpen, setIsFinanceOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
@@ -12,6 +13,7 @@ export const Topbar = () => {
     const handleClickOutside = (event: MouseEvent) => {
       if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
         setIsSettingsOpen(false);
+        setIsFinanceOpen(false);
       }
     };
 
@@ -29,10 +31,11 @@ export const Topbar = () => {
         </button>
         <div className="relative" ref={settingsRef}>
           <button 
-            className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
+            className="flex items-center gap-2 p-2 hover:bg-zinc-800 rounded-lg transition-colors"
             onClick={() => setIsSettingsOpen(!isSettingsOpen)}
           >
             <Settings size={20} className="text-zinc-400" />
+            <span className="text-zinc-400">Configurações</span>
           </button>
           {isSettingsOpen && (
             <div className="absolute right-0 mt-2 w-48 bg-zinc-800 rounded-lg shadow-lg py-1 z-50">
@@ -56,6 +59,40 @@ export const Topbar = () => {
                 <Building size={16} />
                 Empresas
               </button>
+              <div className="relative group">
+                <button
+                  onMouseEnter={() => setIsFinanceOpen(true)}
+                  className="w-full px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 flex items-center justify-between"
+                >
+                  <span>Financeiro</span>
+                  <ChevronRight size={16} />
+                </button>
+                {isFinanceOpen && (
+                  <div className="absolute left-full top-0 w-48 bg-zinc-800 rounded-lg shadow-lg py-1"
+                       onMouseLeave={() => setIsFinanceOpen(false)}>
+                    <button
+                      onClick={() => {
+                        navigate('/categories');
+                        setIsSettingsOpen(false);
+                        setIsFinanceOpen(false);
+                      }}
+                      className="w-full px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 text-left"
+                    >
+                      Categorias
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigate('/dre');
+                        setIsSettingsOpen(false);
+                        setIsFinanceOpen(false);
+                      }}
+                      className="w-full px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 text-left"
+                    >
+                      DRE
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
