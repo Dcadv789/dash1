@@ -170,6 +170,7 @@ export const Companies = () => {
                       <div>
                         <h3 className="text-lg font-semibold text-zinc-100">{company.trading_name}</h3>
                         <p className="text-sm text-zinc-400">{company.name}</p>
+                        <p className="text-xs text-zinc-500 mt-1 font-mono">{company.company_code}</p>
                       </div>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs ${
@@ -211,25 +212,30 @@ export const Companies = () => {
                     </div>
                   </div>
 
-                  <div className="mt-6 flex items-center justify-between">
-                    <span className="text-xs text-zinc-500 font-mono">{company.id}</span>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => setViewingCompany(company)}
-                        className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-zinc-100"
-                      >
-                        <Eye size={16} />
-                      </button>
-                      <button
-                        onClick={() => setEditingCompany(company)}
-                        className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-zinc-100"
-                      >
-                        <Edit size={16} />
-                      </button>
-                      <button className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-red-400">
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                  <div className="mt-6 flex items-center justify-end gap-2">
+                    <button
+                      onClick={() => setViewingCompany(company)}
+                      className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-zinc-100"
+                    >
+                      <Eye size={16} />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingCompany({
+                          ...company,
+                          tradingName: company.trading_name,
+                          contractStartDate: company.contract_start_date || '',
+                          code: company.company_code || ''
+                        });
+                        setShowModal(true);
+                      }}
+                      className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-zinc-100"
+                    >
+                      <Edit size={16} />
+                    </button>
+                    <button className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-red-400">
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 </div>
               </div>

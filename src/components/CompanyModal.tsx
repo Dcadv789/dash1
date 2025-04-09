@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, User, Plus, Trash2 } from 'lucide-react';
 import { Company } from '../types/company';
 
@@ -44,16 +44,21 @@ const formatCPF = (value: string) => {
     .slice(0, 14);
 };
 
+const generateCompanyCode = () => {
+  return `CP${Math.floor(Math.random() * 9999).toString().padStart(4, '0')}`;
+};
+
 export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: CompanyModalProps) => {
   const [companyData, setCompanyData] = useState({
-    name: editingCompany?.name || '',
-    tradingName: editingCompany?.tradingName || '',
-    cnpj: editingCompany?.cnpj || '',
-    phone: editingCompany?.phone || '',
-    email: editingCompany?.email || '',
-    contractStartDate: editingCompany?.contractStartDate || '',
-    isActive: editingCompany?.isActive ?? true,
-    partners: [] as Partner[]
+    name: '',
+    tradingName: '',
+    cnpj: '',
+    phone: '',
+    email: '',
+    contractStartDate: '',
+    isActive: true,
+    partners: [] as Partner[],
+    code: ''
   });
 
   const [newPartner, setNewPartner] = useState<Partner>({
@@ -63,6 +68,34 @@ export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: Compan
     email: '',
     phone: ''
   });
+
+  useEffect(() => {
+    if (editingCompany) {
+      setCompanyData({
+        name: editingCompany.name || '',
+        tradingName: editingCompany.tradingName || '',
+        cnpj: editingCompany.cnpj || '',
+        phone: editingCompany.phone || '',
+        email: editingCompany.email || '',
+        contractStartDate: editingCompany.contractStartDate || '',
+        isActive: editingCompany.isActive ?? true,
+        partners: editingCompany.partners || [],
+        code: editingCompany.code || ''
+      });
+    } else {
+      setCompanyData({
+        name: '',
+        tradingName: '',
+        cnpj: '',
+        phone: '',
+        email: '',
+        contractStartDate: '',
+        isActive: true,
+        partners: [],
+        code: generateCompanyCode()
+      });
+    }
+  }, [editingCompany]);
 
   const handleAddPartner = () => {
     if (!newPartner.name || !newPartner.cpf) return;
@@ -90,12 +123,10 @@ export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: Compan
 
   const handleSave = () => {
     const companyId = editingCompany?.id || crypto.randomUUID();
-    const companyCode = editingCompany?.code || `EMP${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
 
     onSave({
       ...companyData,
-      id: companyId,
-      code: companyCode
+      id: companyId
     });
   };
 
@@ -118,6 +149,18 @@ export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: Compan
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1">
+                Código da Empresa
+              </label>
+              <input
+                type="text"
+                value={companyData.code}
+                readOnly
+                className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 opacity-50"
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-1">
                 Razão Social
