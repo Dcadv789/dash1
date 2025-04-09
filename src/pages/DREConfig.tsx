@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Copy } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { DREConfigAccountRow } from '../components/DREConfig/DREConfigAccountRow';
 import { DREConfigAccountModal } from '../components/DREConfig/DREConfigAccountModal';
-import { DREConfigCopyModal } from '../components/DREConfig/DREConfigCopyModal';
 import { Company } from '../types/company';
 import { Category, Indicator } from '../types/financial';
 import { DREConfigAccount } from '../types/DREConfig';
@@ -26,12 +25,9 @@ export const DREConfig = () => {
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [selectedType, setSelectedType] = useState<AccountType>('all');
   const [showNewAccountModal, setShowNewAccountModal] = useState(false);
-  const [showCopyModal, setShowCopyModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<DREConfigAccount | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [indicators, setIndicators] = useState<Indicator[]>([]);
-  const [copyFromCompanyId, setCopyFromCompanyId] = useState('');
-  const [copyToCompanyId, setCopyToCompanyId] = useState('');
 
   useEffect(() => {
     fetchCompanies();
@@ -165,43 +161,6 @@ export const DREConfig = () => {
     }
   };
 
-  const handleCopyAccounts = async () => {
-    if (!copyFromCompanyId || !copyToCompanyId) return;
-
-    try {
-      const { data: sourceAccounts, error: fetchError } = await supabase
-        .from('dre_config_accounts')
-        .select('*')
-        .eq('company_id', copyFromCompanyId);
-
-      if (fetchError) throw fetchError;
-
-      if (sourceAccounts) {
-        const newAccounts = sourceAccounts.map(acc => ({
-          ...acc,
-          id: undefined,
-          company_id: copyToCompanyId,
-          created_at: undefined,
-          updated_at: undefined
-        }));
-
-        const { error: insertError } = await supabase
-          .from('dre_config_accounts')
-          .insert(newAccounts);
-
-        if (insertError) throw insertError;
-      }
-
-      setShowCopyModal(false);
-      setCopyFromCompanyId('');
-      setCopyToCompanyId('');
-      fetchAccounts();
-    } catch (err) {
-      console.error('Erro ao copiar contas:', err);
-      setError('Erro ao copiar contas');
-    }
-  };
-
   const getChildAccounts = (accountId: string | null): DREConfigAccount[] => {
     return accounts.filter(acc => acc.parentAccountId === accountId);
   };
@@ -278,22 +237,13 @@ export const DREConfig = () => {
           <h1 className="text-2xl font-bold text-zinc-100">DRE Config</h1>
           <p className="text-zinc-400 mt-1">Configuração do Demonstrativo de Resultados</p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowNewAccountModal(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white flex items-center gap-2"
-          >
-            <Plus size={20} />
-            Nova Conta
-          </button>
-          <button
-            onClick={() => setShowCopyModal(true)}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 flex items-center gap-2"
-          >
-            <Copy size={20} />
-            Copiar DRE
-          </button>
-        </div>
+        <button
+          onClick={() => setShowNewAccountModal(true)}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white flex items-center gap-2"
+        >
+          <Plus size={20} />
+          Nova Conta
+        </button>
       </div>
 
       {error && (
@@ -397,17 +347,6 @@ export const DREConfig = () => {
         parentAccounts={accounts.filter(acc => 
           acc.type === 'total' || acc.type === 'flex'
         )}
-      />
-
-      <DREConfigCopyModal
-        isOpen={showCopyModal}
-        onClose={() => setShowCopyModal(false)}
-        companies={companies}
-        copyFromCompanyId={copyFromCompanyId}
-        copyToCompanyId={copyToCompanyId}
-        onCopyFromChange={setCopyFromCompanyId}
-        onCopyToChange={setCopyToCompanyId}
-        onCopy={handleCopyAccounts}
       />
     </div>
   );

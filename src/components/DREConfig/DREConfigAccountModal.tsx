@@ -29,7 +29,7 @@ export const DREConfigAccountModal = ({
   indicators,
   parentAccounts
 }: DREConfigAccountModalProps) => {
-  const [accountType, setAccountType] = useState<'category' | 'indicator' | 'total' | 'blank'>('category');
+  const [accountType, setAccountType] = useState<'category' | 'indicator' | 'total' | 'flex'>('category');
   const [categoryType, setCategoryType] = useState<'revenue' | 'expense'>('revenue');
   const [accountName, setAccountName] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -85,7 +85,7 @@ export const DREConfigAccountModal = ({
       categoryIds: accountType === 'category' ? selectedCategories : undefined,
       indicatorId: accountType === 'indicator' ? selectedIndicator : undefined,
       selectedAccounts: accountType === 'total' ? selectedAccounts : undefined,
-      sign: accountType === 'blank' ? blankAccountSign : undefined
+      sign: accountType === 'flex' ? blankAccountSign : undefined
     };
 
     onSave(newAccount);
@@ -176,11 +176,11 @@ export const DREConfigAccountModal = ({
               <label className="flex items-center gap-2">
                 <input
                   type="radio"
-                  checked={accountType === 'blank'}
-                  onChange={() => setAccountType('blank')}
+                  checked={accountType === 'flex'}
+                  onChange={() => setAccountType('flex')}
                   className="text-blue-600"
                 />
-                <span className="text-zinc-300">Em Branco</span>
+                <span className="text-zinc-300">Flexível</span>
               </label>
             </div>
           </div>
@@ -294,7 +294,7 @@ export const DREConfigAccountModal = ({
                   .filter((acc: DREConfigAccount) => 
                     acc.companyId === selectedCompanyId && 
                     acc.type !== 'total' &&
-                    acc.type !== 'blank'
+                    acc.type !== 'flex'
                   )
                   .map((account: DREConfigAccount) => (
                     <label key={account.id} className="flex items-center gap-2 p-2 hover:bg-zinc-800 rounded-lg">
@@ -317,7 +317,7 @@ export const DREConfigAccountModal = ({
             </div>
           )}
 
-          {accountType === 'blank' && (
+          {accountType === 'flex' && (
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-2">
                 Sinal da Conta

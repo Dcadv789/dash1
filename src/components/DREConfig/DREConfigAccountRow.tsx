@@ -17,7 +17,7 @@ const TYPE_LABELS = {
   revenue: 'Receita',
   expense: 'Despesa',
   total: 'Totalizador',
-  blank: 'Em Branco'
+  flex: 'Flexível'
 };
 
 export const DREConfigAccountRow = ({
@@ -55,7 +55,7 @@ export const DREConfigAccountRow = ({
             {account.type === 'revenue' && <Plus size={16} className="text-green-400" />}
             {account.type === 'expense' && <Minus size={16} className="text-red-400" />}
             {account.type === 'total' && <Equal size={16} className="text-blue-400" />}
-            {account.type === 'blank' && (account.sign === 'positive' ? 
+            {account.type === 'flex' && (account.sign === 'positive' ? 
               <Plus size={16} className="text-zinc-400" /> : 
               <Minus size={16} className="text-zinc-400" />
             )}
