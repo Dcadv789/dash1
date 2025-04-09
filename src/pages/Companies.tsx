@@ -70,7 +70,6 @@ export const Companies = () => {
           phone: companyData.phone,
           email: companyData.email,
           contract_start_date: companyData.contractStartDate,
-          company_code: companyData.code,
           is_active: companyData.isActive
         }])
         .select()
@@ -170,7 +169,6 @@ export const Companies = () => {
                       <div>
                         <h3 className="text-lg font-semibold text-zinc-100">{company.trading_name}</h3>
                         <p className="text-sm text-zinc-400">{company.name}</p>
-                        <p className="text-xs text-zinc-500 mt-1 font-mono">{company.company_code}</p>
                       </div>
                     </div>
                     <span className={`px-3 py-1 rounded-full text-xs ${
@@ -225,7 +223,6 @@ export const Companies = () => {
                           ...company,
                           tradingName: company.trading_name,
                           contractStartDate: company.contract_start_date || '',
-                          code: company.company_code || ''
                         });
                         setShowModal(true);
                       }}
