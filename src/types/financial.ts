@@ -30,8 +30,12 @@ export interface Indicator {
   id: string;
   code: string;
   name: string;
-  formula: string;
-  displayOrder: number;
-  companyId: string;
-  isActive: boolean;
+  type: 'manual' | 'calculated';
+  calculation_type?: 'category' | 'indicator';
+  operation?: 'sum' | 'subtract' | 'multiply' | 'divide';
+  source_ids: string[];
+  company_id: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
 }
