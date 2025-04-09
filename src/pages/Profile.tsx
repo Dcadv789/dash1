@@ -1,66 +1,167 @@
-import React, { useState } from 'react';
-import { User, Mail, Phone, MapPin, Building, Calendar, PencilIcon, Camera, Save, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Mail, Phone, Building, Calendar, PencilIcon, Camera, Save, X } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../contexts/AuthContext';
 
 interface ProfileData {
+  id: string;
   name: string;
   email: string;
-  phone: string;
-  location: string;
-  department: string;
-  startDate: string;
-  company: string;
-  role: string;
-  avatarUrl: string | null;
+  phone: string | null;
+  company_id: string;
+  user_role: string | null;
+  avatar_url: string | null;
+  company_name?: string;
+  created_at: string;
 }
 
 export const Profile = () => {
   const [isEditing, setIsEditing] = useState(false);
-  const [profileData, setProfileData] = useState<ProfileData>({
-    name: 'João Silva',
-    email: 'joao.silva@empresa.com',
-    phone: '(11) 98765-4321',
-    location: 'São Paulo, SP',
-    department: 'Departamento Financeiro',
-    startDate: 'Janeiro 2023',
-    company: 'TechCorp Solutions',
-    role: 'Administrador',
-    avatarUrl: null
-  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [profileData, setProfileData] = useState<ProfileData | null>(null);
+  const { user } = useAuth();
 
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  useEffect(() => {
+    fetchProfileData();
+  }, [user]);
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setProfileData(prev => ({
-          ...prev,
-          avatarUrl: reader.result as string
-        }));
-      };
-      reader.readAsDataURL(file);
+  const fetchProfileData = async () => {
+    try {
+      if (!user) return;
+
+      const { data: userData, error: userError } = await supabase
+        .from('system_users')
+        .select(`
+          id,
+          name,
+          email,
+          phone,
+          company_id,
+          user_role,
+          avatar_url,
+          created_at,
+          companies (
+            trading_name
+          )
+        `)
+        .eq('auth_user_id', user.id)
+        .single();
+
+      if (userError) throw userError;
+
+      setProfileData({
+        ...userData,
+        company_name: userData.companies?.trading_name
+      });
+    } catch (err) {
+      setError('Erro ao carregar dados do perfil');
+      console.error('Erro:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSave = () => {
-    // Aqui você implementaria a lógica para salvar as alterações
-    setIsEditing(false);
-    setNewPassword('');
-    setConfirmPassword('');
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !profileData) return;
+
+    try {
+      // Upload da imagem para o storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${crypto.randomUUID()}.${fileExt}`;
+      const filePath = `avatars/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('profiles')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Obter URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('profiles')
+        .getPublicUrl(filePath);
+
+      // Atualizar perfil com nova URL
+      const { error: updateError } = await supabase
+        .from('system_users')
+        .update({ avatar_url: publicUrl })
+        .eq('id', profileData.id);
+
+      if (updateError) throw updateError;
+
+      setProfileData({
+        ...profileData,
+        avatar_url: publicUrl
+      });
+    } catch (err) {
+      setError('Erro ao atualizar imagem');
+      console.error('Erro:', err);
+    }
   };
+
+  const handleSave = async () => {
+    if (!profileData) return;
+
+    try {
+      const updates = {
+        name: profileData.name,
+        phone: profileData.phone,
+        user_role: profileData.user_role
+      };
+
+      const { error } = await supabase
+        .from('system_users')
+        .update(updates)
+        .eq('id', profileData.id);
+
+      if (error) throw error;
+
+      setIsEditing(false);
+      await fetchProfileData();
+    } catch (err) {
+      setError('Erro ao salvar alterações');
+      console.error('Erro:', err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto py-8">
+        <div className="bg-zinc-900 rounded-xl p-6">
+          <p className="text-zinc-400 text-center">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profileData) {
+    return (
+      <div className="max-w-4xl mx-auto py-8">
+        <div className="bg-zinc-900 rounded-xl p-6">
+          <p className="text-zinc-400 text-center">Erro ao carregar perfil</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto py-8">
       <div className="bg-zinc-900 rounded-xl p-6">
+        {error && (
+          <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">
+            <p className="text-red-400 text-sm">{error}</p>
+          </div>
+        )}
+
         <div className="flex justify-between items-start mb-8">
           <div className="flex items-center gap-6">
             <div className="relative group">
               <div className="h-24 w-24 rounded-full bg-zinc-800 flex items-center justify-center overflow-hidden">
-                {profileData.avatarUrl ? (
+                {profileData.avatar_url ? (
                   <img 
-                    src={profileData.avatarUrl} 
+                    src={profileData.avatar_url} 
                     alt="Foto de perfil" 
                     className="h-full w-full object-cover"
                   />
@@ -85,13 +186,13 @@ export const Profile = () => {
                 <input
                   type="text"
                   value={profileData.name}
-                  onChange={(e) => setProfileData(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) => setProfileData({ ...profileData, name: e.target.value })}
                   className="text-2xl font-bold text-zinc-100 bg-zinc-800 rounded px-2 py-1"
                 />
               ) : (
                 <h1 className="text-2xl font-bold text-zinc-100">{profileData.name}</h1>
               )}
-              <p className="text-zinc-400">{profileData.role}</p>
+              <p className="text-zinc-400">{profileData.user_role || 'Cargo não definido'}</p>
             </div>
           </div>
           {!isEditing ? (
@@ -105,7 +206,10 @@ export const Profile = () => {
           ) : (
             <div className="flex gap-2">
               <button
-                onClick={() => setIsEditing(false)}
+                onClick={() => {
+                  setIsEditing(false);
+                  fetchProfileData();
+                }}
                 className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 transition-colors"
               >
                 <X size={16} />
@@ -129,65 +233,36 @@ export const Profile = () => {
             <div className="space-y-4">
               <div className="flex items-center gap-3">
                 <Mail className="text-zinc-500" size={20} />
-                {isEditing ? (
-                  <input
-                    type="email"
-                    value={profileData.email}
-                    onChange={(e) => setProfileData(prev => ({ ...prev, email: e.target.value }))}
-                    className="flex-1 bg-zinc-800 rounded px-3 py-2 text-zinc-300"
-                    placeholder="Seu email"
-                  />
-                ) : (
-                  <span className="text-zinc-300">{profileData.email}</span>
-                )}
+                <span className="text-zinc-300">{profileData.email}</span>
               </div>
-
-              {isEditing && (
-                <div className="space-y-3 pl-8">
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    className="w-full bg-zinc-800 rounded px-3 py-2 text-zinc-300"
-                    placeholder="Nova senha"
-                  />
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full bg-zinc-800 rounded px-3 py-2 text-zinc-300"
-                    placeholder="Confirmar nova senha"
-                  />
-                </div>
-              )}
               
               <div className="flex items-center gap-3">
                 <Phone className="text-zinc-500" size={20} />
                 {isEditing ? (
                   <input
                     type="text"
-                    value={profileData.phone}
-                    onChange={(e) => setProfileData(prev => ({ ...prev, phone: e.target.value }))}
+                    value={profileData.phone || ''}
+                    onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
                     className="flex-1 bg-zinc-800 rounded px-3 py-2 text-zinc-300"
                     placeholder="Seu telefone"
                   />
                 ) : (
-                  <span className="text-zinc-300">{profileData.phone}</span>
+                  <span className="text-zinc-300">{profileData.phone || 'Não informado'}</span>
                 )}
               </div>
-              
+
               <div className="flex items-center gap-3">
-                <MapPin className="text-zinc-500" size={20} />
+                <User className="text-zinc-500" size={20} />
                 {isEditing ? (
                   <input
                     type="text"
-                    value={profileData.location}
-                    onChange={(e) => setProfileData(prev => ({ ...prev, location: e.target.value }))}
+                    value={profileData.user_role || ''}
+                    onChange={(e) => setProfileData({ ...profileData, user_role: e.target.value })}
                     className="flex-1 bg-zinc-800 rounded px-3 py-2 text-zinc-300"
-                    placeholder="Sua localização"
+                    placeholder="Seu cargo"
                   />
                 ) : (
-                  <span className="text-zinc-300">{profileData.location}</span>
+                  <span className="text-zinc-300">{profileData.user_role || 'Cargo não definido'}</span>
                 )}
               </div>
             </div>
@@ -198,25 +273,18 @@ export const Profile = () => {
             
             <div className="flex items-center gap-3">
               <Building className="text-zinc-500" size={20} />
-              <span className="text-zinc-300">{profileData.company}</span>
+              <span className="text-zinc-300">{profileData.company_name}</span>
             </div>
             
             <div className="flex items-center gap-3">
               <Calendar className="text-zinc-500" size={20} />
-              <span className="text-zinc-300">Desde {profileData.startDate}</span>
+              <span className="text-zinc-300">
+                Desde {new Date(profileData.created_at).toLocaleDateString('pt-BR', {
+                  month: 'long',
+                  year: 'numeric'
+                })}
+              </span>
             </div>
-          </div>
-        </div>
-
-        <div className="mt-8 pt-6 border-t border-zinc-800">
-          <h2 className="text-lg font-semibold text-zinc-100 mb-4">Atividade Recente</h2>
-          <div className="space-y-4">
-            {[1, 2, 3].map((_, index) => (
-              <div key={index} className="bg-zinc-800/50 rounded-lg p-4">
-                <p className="text-zinc-300">Relatório mensal gerado</p>
-                <p className="text-sm text-zinc-500">Há {index + 1} dias</p>
-              </div>
-            ))}
           </div>
         </div>
       </div>
