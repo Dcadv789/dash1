@@ -61,7 +61,7 @@ export const Companies = () => {
   const handleSaveCompany = async (companyData: any) => {
     try {
       const companyPayload = {
-        id: editingCompany?.id, // Incluir o ID apenas se estiver editando
+        id: editingCompany?.id,
         name: companyData.name,
         trading_name: companyData.tradingName,
         cnpj: companyData.cnpj,
@@ -71,7 +71,6 @@ export const Companies = () => {
         is_active: companyData.isActive
       };
 
-      // Se estiver editando, inclui o ID no payload
       const { data: company, error: companyError } = await supabase
         .from('companies')
         .upsert([companyPayload])
@@ -81,7 +80,6 @@ export const Companies = () => {
       if (companyError) throw companyError;
 
       if (company) {
-        // Primeiro, desativa todos os sócios existentes
         if (editingCompany) {
           await supabase
             .from('company_partners')
@@ -89,7 +87,6 @@ export const Companies = () => {
             .eq('company_id', company.id);
         }
 
-        // Depois, insere os novos sócios
         for (const partner of companyData.partners) {
           const { error: partnerError } = await supabase
             .from('company_partners')
@@ -111,6 +108,40 @@ export const Companies = () => {
       await fetchCompanies();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao salvar empresa');
+    }
+  };
+
+  const handleDeleteCompany = async (companyId: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir esta empresa? Esta ação não pode ser desfeita.')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Primeiro, excluímos todos os sócios da empresa
+      const { error: partnersError } = await supabase
+        .from('company_partners')
+        .delete()
+        .eq('company_id', companyId);
+
+      if (partnersError) throw partnersError;
+
+      // Depois, excluímos a empresa
+      const { error: companyError } = await supabase
+        .from('companies')
+        .delete()
+        .eq('id', companyId);
+
+      if (companyError) throw companyError;
+
+      // Atualiza a lista de empresas
+      await fetchCompanies();
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao excluir empresa');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -233,7 +264,10 @@ export const Companies = () => {
                     >
                       <Edit size={16} />
                     </button>
-                    <button className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-red-400">
+                    <button 
+                      onClick={() => handleDeleteCompany(company.id)}
+                      className="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-red-400"
+                    >
                       <Trash2 size={16} />
                     </button>
                   </div>
