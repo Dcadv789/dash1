@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Copy, PencilIcon, Save, Check, X, Calculator, Power, Trash2, Search } from 'lucide-react';
+import { Plus, Copy, PencilIcon, Save, Check, X, Calculator, Power, Trash2, Search, SlidersHorizontal } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Category, Indicator } from '../types/financial';
 
@@ -35,6 +35,7 @@ export const Indicators = () => {
   const [showNewIndicatorModal, setShowNewIndicatorModal] = useState(false);
   const [editingIndicator, setEditingIndicator] = useState<Indicator | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedType, setSelectedType] = useState<'all' | 'manual' | 'calculated'>('all');
 
   // Form state
   const [newIndicator, setNewIndicator] = useState({
@@ -255,7 +256,10 @@ export const Indicators = () => {
       indicator.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       indicator.code.toLowerCase().includes(searchTerm.toLowerCase());
 
-    return matchesCompany && matchesSearch;
+    const matchesType = selectedType === 'all' ? true :
+      indicator.type === selectedType;
+
+    return matchesCompany && matchesSearch && matchesType;
   });
 
   if (loading) {
@@ -291,9 +295,9 @@ export const Indicators = () => {
       )}
 
       <div className="bg-zinc-900 rounded-xl p-8 mb-8">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-4">
+            <div className="relative flex-1">
               <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400" />
               <input
                 type="text"
@@ -303,20 +307,54 @@ export const Indicators = () => {
                 className="w-full pl-10 pr-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 placeholder-zinc-500"
               />
             </div>
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal size={20} className="text-zinc-400" />
+              <select
+                value={selectedCompanyId}
+                onChange={(e) => setSelectedCompanyId(e.target.value)}
+                className="px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 min-w-[200px]"
+              >
+                <option value="">Todas as empresas</option>
+                {companies.map(company => (
+                  <option key={company.id} value={company.id}>
+                    {company.trading_name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div className="w-full md:w-64">
-            <select
-              value={selectedCompanyId}
-              onChange={(e) => setSelectedCompanyId(e.target.value)}
-              className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => setSelectedType('all')}
+              className={`px-4 py-2 rounded-lg ${
+                selectedType === 'all'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+              }`}
             >
-              <option value="">Todas as empresas</option>
-              {companies.map(company => (
-                <option key={company.id} value={company.id}>
-                  {company.trading_name}
-                </option>
-              ))}
-            </select>
+              Todos
+            </button>
+            <button
+              onClick={() => setSelectedType('manual')}
+              className={`px-4 py-2 rounded-lg ${
+                selectedType === 'manual'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+              }`}
+            >
+              Manual
+            </button>
+            <button
+              onClick={() => setSelectedType('calculated')}
+              className={`px-4 py-2 rounded-lg ${
+                selectedType === 'calculated'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+              }`}
+            >
+              Calculado
+            </button>
           </div>
         </div>
       </div>
@@ -327,7 +365,7 @@ export const Indicators = () => {
             <thead>
               <tr className="border-b border-zinc-800">
                 <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Código</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Nome</th>
+                <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Indicador</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Tipo</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Cálculo</th>
                 <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-400">Ações</th>
@@ -335,50 +373,13 @@ export const Indicators = () => {
             </thead>
             <tbody>
               {filteredIndicators.map((indicator) => (
-                <React.Fragment key={indicator.id}>
-                  <tr className="border-b border-zinc-800 hover:bg-zinc-800/50">
-                    <td className="px-6 py-4">
-                      <span className="text-zinc-400 font-mono">{indicator.code}</span>
-                    </td>
-                    <td className="px-6 py-4 text-zinc-100">{indicator.name}</td>
-                    <td className="px-6 py-4">
-                      <span className={`px-3 py-1 rounded-full text-xs ${
-                        indicator.type === 'manual'
-                          ? 'bg-blue-500/20 text-blue-400'
-                          : 'bg-green-500/20 text-green-400'
-                      }`}>
-                        {indicator.type === 'manual' ? 'Manual' : 'Calculado'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-zinc-400">
-                      {indicator.type === 'calculated' && (
-                        <div className="flex items-center gap-2">
-                          <Calculator size={16} className="text-zinc-500" />
-                          <span>
-                            {indicator.calculation_type === 'category' ? 'Categorias' : 'Indicadores'} - {OPERATION_LABELS[indicator.operation!]}
-                          </span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => setEditingIndicator(indicator)}
-                          className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
-                        >
-                          <PencilIcon size={16} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteIndicator(indicator.id)}
-                          className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400 hover:text-red-400"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr className="border-b border-zinc-800 bg-zinc-800/25">
-                    <td colSpan={5} className="px-6 py-2">
+                <tr key={indicator.id} className="border-b border-zinc-800 hover:bg-zinc-800/50">
+                  <td className="px-6 py-4">
+                    <span className="text-zinc-400 font-mono">{indicator.code}</span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="space-y-2">
+                      <p className="text-zinc-100">{indicator.name}</p>
                       <div className="flex flex-wrap gap-2">
                         {companies.map(company => (
                           <button
@@ -394,9 +395,44 @@ export const Indicators = () => {
                           </button>
                         ))}
                       </div>
-                    </td>
-                  </tr>
-                </React.Fragment>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1 rounded-full text-xs ${
+                      indicator.type === 'manual'
+                        ? 'bg-blue-500/20 text-blue-400'
+                        : 'bg-green-500/20 text-green-400'
+                    }`}>
+                      {indicator.type === 'manual' ? 'Manual' : 'Calculado'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-zinc-400">
+                    {indicator.type === 'calculated' && (
+                      <div className="flex items-center gap-2">
+                        <Calculator size={16} className="text-zinc-500" />
+                        <span>
+                          {indicator.calculation_type === 'category' ? 'Categorias' : 'Indicadores'} - {OPERATION_LABELS[indicator.operation!]}
+                        </span>
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => setEditingIndicator(indicator)}
+                        className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
+                      >
+                        <PencilIcon size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteIndicator(indicator.id)}
+                        className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400 hover:text-red-400"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
