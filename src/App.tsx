@@ -6,6 +6,7 @@ import { Profile } from './pages/Profile';
 import { Users } from './pages/Users';
 import { Companies } from './pages/Companies';
 import { Categories } from './pages/Categories';
+import { Indicators } from './pages/Indicators';
 import { Dre } from './pages/Dre';
 
 function App() {
@@ -25,6 +26,7 @@ function App() {
               <Route path="/users" element={<Users />} />
               <Route path="/companies" element={<Companies />} />
               <Route path="/categories" element={<Categories />} />
+              <Route path="/indicators" element={<Indicators />} />
               <Route path="/dre" element={<Dre />} />
               <Route path="/" element={
                 <div className="max-w-7xl mx-auto">

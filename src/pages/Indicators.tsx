@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Copy, PencilIcon, Save, Check, X, Plus, Minus, Equal, ArrowUp, ArrowDown, FolderPlus } from 'lucide-react';
+import { Copy, PencilIcon, Save, Check, X, Plus, Minus, Equal, ArrowUp, ArrowDown, Calculator, Power, Trash2 } from 'lucide-react';
 
-interface DreAccount {
+interface Indicator {
   id: string;
   code: string;
   name: string;
-  type: 'revenue' | 'expense' | 'total';
+  formula: string;
   displayOrder: number;
   companyId: string;
   isEditing?: boolean;
-  categoryId?: string; // ID da categoria vinculada
-  sumGroups?: string[]; // IDs dos grupos a serem somados
+  selectedCategories: string[];
+  isActive: boolean;
 }
 
 interface Category {
@@ -21,13 +21,6 @@ interface Category {
   groupId: string | null;
   companyId: string;
   isActive: boolean;
-}
-
-interface CategoryGroup {
-  id: string;
-  name: string;
-  type: 'revenue' | 'expense';
-  companyId: string;
 }
 
 interface Company {
@@ -47,16 +40,7 @@ const saveToStorage = (key: string, value: any) => {
   localStorage.setItem(key, JSON.stringify(value));
 };
 
-const DEFAULT_TOTALS = [
-  { code: 'T01', name: 'Receita Bruta', type: 'total', afterCode: 'R' },
-  { code: 'T02', name: 'Receita Líquida', type: 'total', afterCode: 'R' },
-  { code: 'T03', name: 'Lucro Bruto', type: 'total', afterCode: 'D' },
-  { code: 'T04', name: 'Resultado Operacional', type: 'total', afterCode: 'D' },
-  { code: 'T05', name: 'Resultado Antes do IR', type: 'total', afterCode: 'D' },
-  { code: 'T06', name: 'Resultado Líquido', type: 'total', afterCode: 'D' }
-];
-
-export const Dre = () => {
+export const Indicators = () => {
   const [companies, setCompanies] = useState<Company[]>(() => 
     loadFromStorage('companies', [
       {
@@ -83,16 +67,12 @@ export const Dre = () => {
     ])
   );
 
-  const [accounts, setAccounts] = useState<DreAccount[]>(() => 
-    loadFromStorage('dre_accounts', [])
+  const [indicators, setIndicators] = useState<Indicator[]>(() => 
+    loadFromStorage('indicators', [])
   );
 
   const [categories] = useState<Category[]>(() => 
     loadFromStorage('categories', [])
-  );
-
-  const [groups] = useState<CategoryGroup[]>(() => 
-    loadFromStorage('category_groups', [])
   );
 
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
@@ -101,118 +81,123 @@ export const Dre = () => {
   const [copyToCompanyId, setCopyToCompanyId] = useState<string>('');
   const [editingOrder, setEditingOrder] = useState<string | null>(null);
   const [newOrder, setNewOrder] = useState<number>(0);
-  const [showNewAccountModal, setShowNewAccountModal] = useState(false);
-  const [newAccountType, setNewAccountType] = useState<'category' | 'total'>('category');
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
-  const [newAccountName, setNewAccountName] = useState('');
+  const [showNewIndicatorModal, setShowNewIndicatorModal] = useState(false);
+  const [newIndicatorName, setNewIndicatorName] = useState('');
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedCategoryType, setSelectedCategoryType] = useState<'revenue' | 'expense'>('revenue');
+  const [editingIndicator, setEditingIndicator] = useState<Indicator | null>(null);
 
   useEffect(() => {
-    saveToStorage('dre_accounts', accounts);
-  }, [accounts]);
+    saveToStorage('indicators', indicators);
+  }, [indicators]);
 
-  const startEditingOrder = (accountId: string, currentOrder: number) => {
-    setEditingOrder(accountId);
+  const startEditingOrder = (indicatorId: string, currentOrder: number) => {
+    setEditingOrder(indicatorId);
     setNewOrder(currentOrder);
   };
 
-  const saveOrder = (accountId: string) => {
+  const saveOrder = (indicatorId: string) => {
     if (newOrder < 1) return;
 
-    setAccounts(accounts.map(acc => 
-      acc.id === accountId
-        ? { ...acc, displayOrder: newOrder }
-        : acc
+    setIndicators(indicators.map(ind => 
+      ind.id === indicatorId
+        ? { ...ind, displayOrder: newOrder }
+        : ind
     ));
     setEditingOrder(null);
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>, accountId: string) => {
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>, indicatorId: string) => {
     if (e.key === 'Enter') {
-      saveOrder(accountId);
+      saveOrder(indicatorId);
     }
   };
 
-  const copyAccounts = () => {
+  const copyIndicators = () => {
     if (!copyFromCompanyId || !copyToCompanyId) return;
 
-    const accountsToCopy = accounts.filter(acc => acc.companyId === copyFromCompanyId);
-    const copiedAccounts = accountsToCopy.map(acc => ({
-      ...acc,
+    const indicatorsToCopy = indicators.filter(ind => ind.companyId === copyFromCompanyId);
+    const copiedIndicators = indicatorsToCopy.map(ind => ({
+      ...ind,
       id: Math.random().toString(36).substr(2, 9),
       companyId: copyToCompanyId
     }));
 
-    setAccounts([...accounts, ...copiedAccounts]);
+    setIndicators([...indicators, ...copiedIndicators]);
     setShowCopyModal(false);
     setCopyFromCompanyId('');
     setCopyToCompanyId('');
   };
 
-  const moveAccount = (accountId: string, direction: 'up' | 'down') => {
-    const accountIndex = accounts.findIndex(acc => acc.id === accountId);
-    const account = accounts[accountIndex];
+  const moveIndicator = (indicatorId: string, direction: 'up' | 'down') => {
+    const indicatorIndex = indicators.findIndex(ind => ind.id === indicatorId);
+    const indicator = indicators[indicatorIndex];
     
-    if (!account) return;
+    if (!indicator) return;
 
-    const newAccounts = [...accounts];
-    if (direction === 'up' && accountIndex > 0) {
-      const temp = newAccounts[accountIndex - 1].displayOrder;
-      newAccounts[accountIndex - 1].displayOrder = account.displayOrder;
-      newAccounts[accountIndex].displayOrder = temp;
-    } else if (direction === 'down' && accountIndex < accounts.length - 1) {
-      const temp = newAccounts[accountIndex + 1].displayOrder;
-      newAccounts[accountIndex + 1].displayOrder = account.displayOrder;
-      newAccounts[accountIndex].displayOrder = temp;
+    const newIndicators = [...indicators];
+    if (direction === 'up' && indicatorIndex > 0) {
+      const temp = newIndicators[indicatorIndex - 1].displayOrder;
+      newIndicators[indicatorIndex - 1].displayOrder = indicator.displayOrder;
+      newIndicators[indicatorIndex].displayOrder = temp;
+    } else if (direction === 'down' && indicatorIndex < indicators.length - 1) {
+      const temp = newIndicators[indicatorIndex + 1].displayOrder;
+      newIndicators[indicatorIndex + 1].displayOrder = indicator.displayOrder;
+      newIndicators[indicatorIndex].displayOrder = temp;
     }
 
-    setAccounts(newAccounts);
+    setIndicators(newIndicators);
   };
 
-  const handleAddAccount = () => {
-    if (!selectedCompanyId) return;
+  const handleAddIndicator = () => {
+    if (!selectedCompanyId || !newIndicatorName || selectedCategories.length === 0) return;
 
-    const maxOrder = Math.max(...accounts.map(acc => acc.displayOrder), 0);
-    const newAccount: DreAccount = {
+    const maxOrder = Math.max(...indicators.map(ind => ind.displayOrder), 0);
+    const newIndicator: Indicator = {
       id: Math.random().toString(36).substr(2, 9),
-      code: `A${(accounts.length + 1).toString().padStart(2, '0')}`,
-      name: newAccountName || (newAccountType === 'category' 
-        ? categories.find(c => c.id === selectedCategory)?.name || ''
-        : 'Novo Totalizador'),
-      type: newAccountType === 'category' 
-        ? (categories.find(c => c.id === selectedCategory)?.type || 'revenue')
-        : 'total',
+      code: `I${(indicators.length + 1).toString().padStart(2, '0')}`,
+      name: newIndicatorName,
+      formula: selectedCategories.join('+'),
       displayOrder: maxOrder + 1,
       companyId: selectedCompanyId,
-      categoryId: newAccountType === 'category' ? selectedCategory : undefined,
-      sumGroups: newAccountType === 'total' ? selectedGroups : undefined
+      selectedCategories,
+      isActive: true
     };
 
-    setAccounts([...accounts, newAccount]);
-    setShowNewAccountModal(false);
-    resetNewAccountForm();
+    setIndicators([...indicators, newIndicator]);
+    setShowNewIndicatorModal(false);
+    resetNewIndicatorForm();
   };
 
-  const resetNewAccountForm = () => {
-    setNewAccountType('category');
-    setSelectedCategory('');
-    setSelectedGroups([]);
-    setNewAccountName('');
+  const handleEditIndicator = () => {
+    if (!editingIndicator) return;
+
+    setIndicators(indicators.map(ind => 
+      ind.id === editingIndicator.id ? editingIndicator : ind
+    ));
+    setEditingIndicator(null);
   };
 
-  const renderAccountTypeIcon = (type: 'revenue' | 'expense' | 'total') => {
-    switch (type) {
-      case 'revenue':
-        return <Plus size={16} className="text-green-400" />;
-      case 'expense':
-        return <Minus size={16} className="text-red-400" />;
-      case 'total':
-        return <Equal size={16} className="text-blue-400" />;
+  const toggleIndicatorStatus = (indicatorId: string) => {
+    setIndicators(indicators.map(ind => 
+      ind.id === indicatorId ? { ...ind, isActive: !ind.isActive } : ind
+    ));
+  };
+
+  const deleteIndicator = (indicatorId: string) => {
+    if (confirm('Tem certeza que deseja excluir este indicador?')) {
+      setIndicators(indicators.filter(ind => ind.id !== indicatorId));
     }
   };
 
-  const sortedAccounts = [...accounts]
-    .filter(acc => acc.companyId === selectedCompanyId)
+  const resetNewIndicatorForm = () => {
+    setNewIndicatorName('');
+    setSelectedCategories([]);
+    setSelectedCategoryType('revenue');
+  };
+
+  const sortedIndicators = [...indicators]
+    .filter(ind => ind.companyId === selectedCompanyId)
     .sort((a, b) => a.displayOrder - b.displayOrder);
 
   return (
@@ -222,17 +207,17 @@ export const Dre = () => {
         <div className="flex flex-col gap-8">
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-2xl font-bold text-zinc-100">DRE</h1>
-              <p className="text-zinc-400 mt-2">Demonstrativo de Resultados</p>
+              <h1 className="text-2xl font-bold text-zinc-100">Indicadores</h1>
+              <p className="text-zinc-400 mt-2">Gerencie os indicadores financeiros por empresa</p>
             </div>
 
             <div className="flex gap-2">
               <button
-                onClick={() => setShowNewAccountModal(true)}
+                onClick={() => setShowNewIndicatorModal(true)}
                 className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-white flex items-center gap-3"
               >
                 <Plus size={20} />
-                Nova Conta
+                Novo Indicador
               </button>
 
               <button
@@ -240,7 +225,7 @@ export const Dre = () => {
                 className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 flex items-center gap-3"
               >
                 <Copy size={20} />
-                Copiar DRE
+                Copiar Indicadores
               </button>
             </div>
           </div>
@@ -274,27 +259,27 @@ export const Dre = () => {
                 <tr className="border-b border-zinc-800">
                   <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Ordem</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Código</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Tipo</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Nome</th>
+                  <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Fórmula</th>
                   <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-400">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedAccounts.map((account) => (
-                  <tr key={account.id} className="border-b border-zinc-800 hover:bg-zinc-800/50">
+                {sortedIndicators.map((indicator) => (
+                  <tr key={indicator.id} className={`border-b border-zinc-800 hover:bg-zinc-800/50 ${!indicator.isActive && 'opacity-50'}`}>
                     <td className="px-6 py-4">
-                      {editingOrder === account.id ? (
+                      {editingOrder === indicator.id ? (
                         <div className="flex items-center gap-2">
                           <input
                             type="number"
                             value={newOrder}
                             onChange={(e) => setNewOrder(Number(e.target.value))}
-                            onKeyPress={(e) => handleKeyPress(e, account.id)}
+                            onKeyPress={(e) => handleKeyPress(e, indicator.id)}
                             className="w-20 bg-zinc-800 rounded px-2 py-1 text-zinc-100"
                             min="1"
                           />
                           <button
-                            onClick={() => saveOrder(account.id)}
+                            onClick={() => saveOrder(indicator.id)}
                             className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-green-400"
                           >
                             <Check size={16} />
@@ -309,31 +294,47 @@ export const Dre = () => {
                       ) : (
                         <span 
                           className="text-zinc-400 cursor-pointer hover:text-zinc-100"
-                          onClick={() => startEditingOrder(account.id, account.displayOrder)}
+                          onClick={() => startEditingOrder(indicator.id, indicator.displayOrder)}
                         >
-                          {account.displayOrder}
+                          {indicator.displayOrder}
                         </span>
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <span className="text-zinc-400 font-mono">{account.code}</span>
+                      <span className="text-zinc-400 font-mono">{indicator.code}</span>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-zinc-800">
-                        {renderAccountTypeIcon(account.type)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-zinc-100">{account.name}</td>
+                    <td className="px-6 py-4 text-zinc-100">{indicator.name}</td>
+                    <td className="px-6 py-4 text-zinc-400 font-mono">{indicator.formula}</td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <button
-                          onClick={() => moveAccount(account.id, 'up')}
+                          onClick={() => toggleIndicatorStatus(indicator.id)}
+                          className={`p-1 hover:bg-zinc-700 rounded-lg transition-colors ${
+                            indicator.isActive ? 'text-green-400' : 'text-red-400'
+                          }`}
+                        >
+                          <Power size={16} />
+                        </button>
+                        <button
+                          onClick={() => setEditingIndicator(indicator)}
+                          className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
+                        >
+                          <PencilIcon size={16} />
+                        </button>
+                        <button
+                          onClick={() => deleteIndicator(indicator.id)}
+                          className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400 hover:text-red-400"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                        <button
+                          onClick={() => moveIndicator(indicator.id, 'up')}
                           className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
                         >
                           <ArrowUp size={16} />
                         </button>
                         <button
-                          onClick={() => moveAccount(account.id, 'down')}
+                          onClick={() => moveIndicator(indicator.id, 'down')}
                           className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
                         >
                           <ArrowDown size={16} />
@@ -348,22 +349,23 @@ export const Dre = () => {
         </div>
       ) : (
         <div className="bg-zinc-900 rounded-xl p-8 text-center">
-          <p className="text-zinc-400">Selecione uma empresa para visualizar o DRE</p>
+          <p className="text-zinc-400">Selecione uma empresa para gerenciar os indicadores</p>
         </div>
       )}
 
-      {/* Modal de Nova Conta */}
-      {showNewAccountModal && (
+      {/* Modal de Novo/Editar Indicador */}
+      {(showNewIndicatorModal || editingIndicator) && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-semibold text-zinc-100">
-                Nova Conta
+                {editingIndicator ? 'Editar Indicador' : 'Novo Indicador'}
               </h3>
               <button
                 onClick={() => {
-                  setShowNewAccountModal(false);
-                  resetNewAccountForm();
+                  setShowNewIndicatorModal(false);
+                  setEditingIndicator(null);
+                  resetNewIndicatorForm();
                 }}
                 className="text-zinc-400 hover:text-zinc-100"
               >
@@ -374,113 +376,123 @@ export const Dre = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-zinc-400 mb-2">
-                  Tipo de Conta
+                  Nome do Indicador
+                </label>
+                <input
+                  type="text"
+                  value={editingIndicator ? editingIndicator.name : newIndicatorName}
+                  onChange={(e) => {
+                    if (editingIndicator) {
+                      setEditingIndicator({ ...editingIndicator, name: e.target.value });
+                    } else {
+                      setNewIndicatorName(e.target.value);
+                    }
+                  }}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                  placeholder="Ex: Margem de Lucro"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">
+                  Tipo de Categoria
                 </label>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2">
                     <input
                       type="radio"
-                      checked={newAccountType === 'category'}
-                      onChange={() => setNewAccountType('category')}
+                      checked={selectedCategoryType === 'revenue'}
+                      onChange={() => {
+                        setSelectedCategoryType('revenue');
+                        setSelectedCategories([]);
+                      }}
                       className="text-blue-600"
                     />
-                    <span className="text-zinc-300">Categoria</span>
+                    <span className="text-zinc-300">Receitas</span>
                   </label>
                   <label className="flex items-center gap-2">
                     <input
                       type="radio"
-                      checked={newAccountType === 'total'}
-                      onChange={() => setNewAccountType('total')}
+                      checked={selectedCategoryType === 'expense'}
+                      onChange={() => {
+                        setSelectedCategoryType('expense');
+                        setSelectedCategories([]);
+                      }}
                       className="text-blue-600"
                     />
-                    <span className="text-zinc-300">Totalizador</span>
+                    <span className="text-zinc-300">Despesas</span>
                   </label>
                 </div>
               </div>
 
-              {newAccountType === 'category' ? (
-                <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-2">
-                    Selecione uma Categoria
-                  </label>
-                  <select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
-                  >
-                    <option value="">Selecione...</option>
-                    {categories
-                      .filter(c => c.companyId === selectedCompanyId && c.isActive)
-                      .map(category => (
-                        <option key={category.id} value={category.id}>
-                          {category.code} - {category.name}
-                        </option>
-                      ))}
-                  </select>
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">
+                  Selecione as Categorias para o Cálculo
+                </label>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {categories
+                    .filter(c => 
+                      c.companyId === selectedCompanyId && 
+                      c.isActive && 
+                      c.type === selectedCategoryType
+                    )
+                    .map(category => (
+                      <label key={category.id} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={editingIndicator 
+                            ? editingIndicator.selectedCategories.includes(category.id)
+                            : selectedCategories.includes(category.id)
+                          }
+                          onChange={(e) => {
+                            const categoryId = category.id;
+                            if (editingIndicator) {
+                              const newCategories = e.target.checked
+                                ? [...editingIndicator.selectedCategories, categoryId]
+                                : editingIndicator.selectedCategories.filter(id => id !== categoryId);
+                              setEditingIndicator({
+                                ...editingIndicator,
+                                selectedCategories: newCategories,
+                                formula: newCategories.join('+')
+                              });
+                            } else {
+                              if (e.target.checked) {
+                                setSelectedCategories([...selectedCategories, categoryId]);
+                              } else {
+                                setSelectedCategories(selectedCategories.filter(id => id !== categoryId));
+                              }
+                            }
+                          }}
+                          className="text-blue-600 rounded"
+                        />
+                        <span className="text-zinc-300">{category.code} - {category.name}</span>
+                      </label>
+                    ))}
                 </div>
-              ) : (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">
-                      Nome do Totalizador
-                    </label>
-                    <input
-                      type="text"
-                      value={newAccountName}
-                      onChange={(e) => setNewAccountName(e.target.value)}
-                      className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
-                      placeholder="Ex: Resultado Operacional"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">
-                      Selecione os Grupos para Somar
-                    </label>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {groups
-                        .filter(g => g.companyId === selectedCompanyId)
-                        .map(group => (
-                          <label key={group.id} className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={selectedGroups.includes(group.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedGroups([...selectedGroups, group.id]);
-                                } else {
-                                  setSelectedGroups(selectedGroups.filter(id => id !== group.id));
-                                }
-                              }}
-                              className="text-blue-600 rounded"
-                            />
-                            <span className="text-zinc-300">{group.name}</span>
-                          </label>
-                        ))}
-                    </div>
-                  </div>
-                </>
-              )}
+              </div>
             </div>
 
             <div className="flex justify-end gap-2 mt-6">
               <button
                 onClick={() => {
-                  setShowNewAccountModal(false);
-                  resetNewAccountForm();
+                  setShowNewIndicatorModal(false);
+                  setEditingIndicator(null);
+                  resetNewIndicatorForm();
                 }}
                 className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300"
               >
                 Cancelar
               </button>
               <button
-                onClick={handleAddAccount}
+                onClick={editingIndicator ? handleEditIndicator : handleAddIndicator}
                 disabled={
-                  (newAccountType === 'category' && !selectedCategory) ||
-                  (newAccountType === 'total' && (!newAccountName || selectedGroups.length === 0))
+                  editingIndicator
+                    ? !editingIndicator.name || editingIndicator.selectedCategories.length === 0
+                    : !newIndicatorName || selectedCategories.length === 0
                 }
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Adicionar
+                {editingIndicator ? 'Salvar' : 'Adicionar'}
               </button>
             </div>
           </div>
@@ -492,7 +504,7 @@ export const Dre = () => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold text-zinc-100 mb-4">
-              Copiar DRE
+              Copiar Indicadores
             </h3>
             
             <div className="space-y-4">
@@ -541,7 +553,7 @@ export const Dre = () => {
                 Cancelar
               </button>
               <button
-                onClick={copyAccounts}
+                onClick={copyIndicators}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white"
               >
                 Copiar
