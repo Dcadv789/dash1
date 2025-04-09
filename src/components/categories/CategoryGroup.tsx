@@ -14,6 +14,7 @@ interface CategoryGroupProps {
   categories: Category[];
   companies: Company[];
   onAddCategory: (groupId?: string) => void;
+  onEditGroup: (groupId: string, newName: string) => void;
   onToggleStatus: (categoryId: string, companyId: string) => void;
   onUpdateCategory: (categoryId: string, name: string) => void;
   onDeleteCategory: (categoryId: string) => void;
@@ -26,6 +27,7 @@ export const CategoryGroup: React.FC<CategoryGroupProps> = ({
   categories,
   companies,
   onAddCategory,
+  onEditGroup,
   onToggleStatus,
   onUpdateCategory,
   onDeleteCategory,
@@ -33,6 +35,8 @@ export const CategoryGroup: React.FC<CategoryGroupProps> = ({
 }) => {
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [isEditingGroup, setIsEditingGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState(groupName);
 
   const handleStartEdit = (category: Category) => {
     setEditingCategory(category.id);
@@ -47,17 +51,62 @@ export const CategoryGroup: React.FC<CategoryGroupProps> = ({
     setNewCategoryName('');
   };
 
+  const handleSaveGroupEdit = () => {
+    if (groupId && newGroupName.trim()) {
+      onEditGroup(groupId, newGroupName);
+      setIsEditingGroup(false);
+    }
+  };
+
   return (
     <div className="bg-zinc-800/50 rounded-lg p-4">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-medium text-zinc-200">{groupName}</h3>
-        <button
-          onClick={() => onAddCategory(groupId)}
-          className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 text-sm flex items-center gap-2"
-        >
-          <Plus size={16} />
-          Adicionar Categoria
-        </button>
+        {isEditingGroup && groupId ? (
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={newGroupName}
+              onChange={(e) => setNewGroupName(e.target.value)}
+              className="bg-zinc-700 px-2 py-1 rounded text-zinc-100"
+              autoFocus
+            />
+            <button
+              onClick={handleSaveGroupEdit}
+              className="p-1 hover:bg-zinc-700 rounded-lg text-green-400"
+            >
+              <Check size={16} />
+            </button>
+            <button
+              onClick={() => {
+                setIsEditingGroup(false);
+                setNewGroupName(groupName);
+              }}
+              className="p-1 hover:bg-zinc-700 rounded-lg text-red-400"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        ) : (
+          <h3 className="text-lg font-medium text-zinc-200">{groupName}</h3>
+        )}
+        <div className="flex items-center gap-2">
+          {groupId && !isEditingGroup && (
+            <button
+              onClick={() => setIsEditingGroup(true)}
+              className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 text-sm flex items-center gap-2"
+            >
+              <PencilIcon size={16} />
+              Editar
+            </button>
+          )}
+          <button
+            onClick={() => onAddCategory(groupId)}
+            className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 text-sm flex items-center gap-2"
+          >
+            <Plus size={16} />
+            Adicionar Categoria
+          </button>
+        </div>
       </div>
 
       <div className="space-y-4">

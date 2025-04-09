@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, FolderPlus } from 'lucide-react';
+import { FolderPlus } from 'lucide-react';
 import { CategoryGroup } from './CategoryGroup';
 import { CategoryGroup as CategoryGroupType, Category } from '../../types/financial';
 
@@ -17,6 +17,7 @@ interface CategorySectionProps {
   companies: Company[];
   onCreateGroup: (type: 'revenue' | 'expense') => void;
   onCreateCategory: (type: 'revenue' | 'expense', groupId?: string) => void;
+  onEditGroup: (groupId: string, newName: string) => void;
   onToggleStatus: (categoryId: string, companyId: string) => void;
   onUpdateCategory: (categoryId: string, name: string) => void;
   onDeleteCategory: (categoryId: string) => void;
@@ -31,6 +32,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
   companies,
   onCreateGroup,
   onCreateCategory,
+  onEditGroup,
   onToggleStatus,
   onUpdateCategory,
   onDeleteCategory,
@@ -40,24 +42,13 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
     <div className="bg-zinc-900 rounded-xl p-6">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-semibold text-zinc-100">{title}</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={() => onCreateGroup(type)}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 flex items-center gap-2"
-          >
-            <FolderPlus size={16} />
-            Novo Grupo
-          </button>
-          <button
-            onClick={() => onCreateCategory(type)}
-            className={`px-4 py-2 ${
-              type === 'revenue' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
-            } rounded-lg text-white flex items-center gap-2`}
-          >
-            <Plus size={16} />
-            {type === 'revenue' ? 'Nova Receita' : 'Nova Despesa'}
-          </button>
-        </div>
+        <button
+          onClick={() => onCreateGroup(type)}
+          className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 flex items-center gap-2"
+        >
+          <FolderPlus size={16} />
+          Novo Grupo
+        </button>
       </div>
 
       <div className="space-y-4">
@@ -76,6 +67,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
                 categories={groupCategories}
                 companies={companies}
                 onAddCategory={(groupId) => onCreateCategory(type, groupId)}
+                onEditGroup={onEditGroup}
                 onToggleStatus={onToggleStatus}
                 onUpdateCategory={onUpdateCategory}
                 onDeleteCategory={onDeleteCategory}
@@ -89,6 +81,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
           categories={categories.filter(cat => cat.type === type && !cat.group_id)}
           companies={companies}
           onAddCategory={() => onCreateCategory(type)}
+          onEditGroup={() => {}}
           onToggleStatus={onToggleStatus}
           onUpdateCategory={onUpdateCategory}
           onDeleteCategory={onDeleteCategory}

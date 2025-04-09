@@ -111,6 +111,24 @@ export const Categories = () => {
     }
   };
 
+  const handleEditGroup = async (groupId: string, newName: string) => {
+    try {
+      const { error } = await supabase
+        .from('category_groups')
+        .update({ name: newName })
+        .eq('id', groupId);
+
+      if (error) throw error;
+
+      setCategoryGroups(categoryGroups.map(group =>
+        group.id === groupId ? { ...group, name: newName } : group
+      ));
+    } catch (err) {
+      console.error('Erro ao atualizar grupo:', err);
+      setError('Erro ao atualizar grupo');
+    }
+  };
+
   const handleCreateCategory = async (
     type: 'revenue' | 'expense',
     groupId: string | null = null
@@ -319,6 +337,7 @@ export const Categories = () => {
           companies={companies}
           onCreateGroup={handleCreateGroup}
           onCreateCategory={handleCreateCategory}
+          onEditGroup={handleEditGroup}
           onToggleStatus={handleToggleCategoryStatus}
           onUpdateCategory={handleUpdateCategory}
           onDeleteCategory={handleDeleteCategory}
@@ -333,6 +352,7 @@ export const Categories = () => {
           companies={companies}
           onCreateGroup={handleCreateGroup}
           onCreateCategory={handleCreateCategory}
+          onEditGroup={handleEditGroup}
           onToggleStatus={handleToggleCategoryStatus}
           onUpdateCategory={handleUpdateCategory}
           onDeleteCategory={handleDeleteCategory}
