@@ -28,7 +28,7 @@ export const DreCopyModal = ({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
         <h3 className="text-lg font-semibold text-zinc-100 mb-4">
-          Copiar DreConfig
+          Copiar DREConfig
         </h3>
         
         <div className="space-y-4">
