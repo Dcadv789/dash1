@@ -1,37 +1,20 @@
-import React, { useState } from 'react';
-import { User, Edit, Trash2, Plus, Building, Search, Shield, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Edit, Trash2, Plus, Building, Search, Shield, X, Check } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
-interface Permission {
-  page: string;
-  canAccess: boolean;
-  canEdit: boolean;
-}
-
-interface UserData {
+interface SystemUser {
   id: string;
   name: string;
   email: string;
-  companyId: string;
+  company_id: string;
   role: 'master' | 'consultor' | 'cliente' | 'colab';
-  permissions: Permission[];
-  isActive: boolean;
+  is_active: boolean;
 }
 
 interface Company {
   id: string;
-  tradingName: string;
+  trading_name: string;
 }
-
-const AVAILABLE_PAGES = [
-  'Início',
-  'Dashboard',
-  'Vendas',
-  'Análise',
-  'Caixa',
-  'DRE',
-  'Usuários',
-  'Configurações'
-];
 
 const ROLE_LABELS = {
   master: 'Master',
@@ -47,148 +30,163 @@ const ROLE_COLORS = {
   colab: 'bg-orange-500/20 text-orange-400'
 };
 
-const COMPANIES: Company[] = [
-  { id: 'COMP001', tradingName: 'TechCorp' },
-  { id: 'COMP002', tradingName: 'InovaTech' },
-  { id: 'COMP003', tradingName: 'GSE' },
-  { id: 'COMP004', tradingName: 'DataFlow' },
-  { id: 'COMP005', tradingName: 'CloudSys' },
-];
-
-const generatePermissions = (role: UserData['role']): Permission[] => {
-  return AVAILABLE_PAGES.map(page => {
-    switch (role) {
-      case 'master':
-        return { page, canAccess: true, canEdit: true };
-      case 'consultor':
-        return { 
-          page, 
-          canAccess: true, 
-          canEdit: !['Configurações'].includes(page)
-        };
-      case 'cliente':
-        return { 
-          page, 
-          canAccess: !['Usuários', 'Configurações'].includes(page), 
-          canEdit: false 
-        };
-      case 'colab':
-        return { 
-          page, 
-          canAccess: !['Usuários', 'Configurações', 'DRE'].includes(page), 
-          canEdit: false 
-        };
-      default:
-        return { page, canAccess: false, canEdit: false };
-    }
-  });
-};
-
-const USERS: UserData[] = [
-  {
-    id: '1',
-    name: 'João Silva',
-    email: 'joao.silva@techcorp.com',
-    companyId: 'COMP001',
-    role: 'master',
-    permissions: generatePermissions('master'),
-    isActive: true
-  },
-  {
-    id: '2',
-    name: 'Maria Santos',
-    email: 'maria.santos@techcorp.com',
-    companyId: 'COMP001',
-    role: 'consultor',
-    permissions: generatePermissions('consultor'),
-    isActive: true
-  },
-  {
-    id: '3',
-    name: 'Carlos Oliveira',
-    email: 'carlos@inovatech.com',
-    companyId: 'COMP002',
-    role: 'cliente',
-    permissions: generatePermissions('cliente'),
-    isActive: true
-  },
-  {
-    id: '4',
-    name: 'Ana Paula',
-    email: 'ana@gse.com',
-    companyId: 'COMP003',
-    role: 'colab',
-    permissions: generatePermissions('colab'),
-    isActive: true
-  }
-];
-
 export const Users = () => {
-  const [users, setUsers] = useState<UserData[]>(USERS);
-  const [showPermissions, setShowPermissions] = useState<string | null>(null);
+  const [users, setUsers] = useState<SystemUser[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedCompany, setSelectedCompany] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [currentUserRole] = useState<UserData['role']>('master');
-  const [editingUser, setEditingUser] = useState<UserData | null>(null);
+  const [showNewUserModal, setShowNewUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
 
-  const canEditUser = (editorRole: UserData['role'], targetRole: UserData['role']) => {
-    if (editorRole === 'master') return true;
-    
-    const roleHierarchy = {
-      master: 4,
-      consultor: 3,
-      cliente: 2,
-      colab: 1
-    };
-    
-    return roleHierarchy[editorRole] > roleHierarchy[targetRole];
+  // Form state
+  const [newUser, setNewUser] = useState({
+    name: '',
+    email: '',
+    password: '',
+    company_id: '',
+    role: 'colab' as const,
+    is_active: true
+  });
+
+  useEffect(() => {
+    fetchUsers();
+    fetchCompanies();
+  }, []);
+
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('system_users')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setUsers(data || []);
+    } catch (err) {
+      setError('Erro ao carregar usuários');
+      console.error('Erro:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const canEditPermissions = (editorRole: UserData['role'], targetRole: UserData['role']) => {
-    if (editorRole === 'master') return true;
-    if (editorRole === 'consultor') return ['cliente', 'colab'].includes(targetRole);
-    return false;
+  const fetchCompanies = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('companies')
+        .select('id, trading_name')
+        .eq('is_active', true);
+
+      if (error) throw error;
+      setCompanies(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar empresas:', err);
+    }
   };
 
-  const handleEditUser = (user: UserData) => {
-    setEditingUser({ ...user });
+  const handleCreateUser = async () => {
+    try {
+      setLoading(true);
+
+      // 1. Criar usuário no Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: newUser.email,
+        password: newUser.password,
+      });
+
+      if (authError) throw authError;
+
+      // 2. Criar usuário no sistema
+      const { error: systemError } = await supabase
+        .from('system_users')
+        .insert([{
+          name: newUser.name,
+          email: newUser.email,
+          company_id: newUser.company_id,
+          role: newUser.role,
+          is_active: newUser.is_active,
+          auth_user_id: authData.user?.id
+        }]);
+
+      if (systemError) throw systemError;
+
+      // 3. Atualizar lista de usuários
+      await fetchUsers();
+      setShowNewUserModal(false);
+      resetNewUserForm();
+    } catch (err) {
+      setError('Erro ao criar usuário');
+      console.error('Erro:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleSaveUser = () => {
+  const handleUpdateUser = async () => {
     if (!editingUser) return;
 
-    setUsers(users.map(user => 
-      user.id === editingUser.id 
-        ? {
-            ...editingUser,
-            permissions: generatePermissions(editingUser.role)
-          }
-        : user
-    ));
-    setEditingUser(null);
+    try {
+      setLoading(true);
+
+      const { error } = await supabase
+        .from('system_users')
+        .update({
+          name: editingUser.name,
+          company_id: editingUser.company_id,
+          role: editingUser.role,
+          is_active: editingUser.is_active
+        })
+        .eq('id', editingUser.id);
+
+      if (error) throw error;
+
+      await fetchUsers();
+      setEditingUser(null);
+    } catch (err) {
+      setError('Erro ao atualizar usuário');
+      console.error('Erro:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleUpdatePermission = (userId: string, page: string, field: 'canAccess' | 'canEdit', value: boolean) => {
-    const targetUser = users.find(u => u.id === userId);
-    if (!targetUser || !canEditPermissions(currentUserRole, targetUser.role)) return;
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm('Tem certeza que deseja excluir este usuário?')) return;
 
-    setUsers(users.map(user => {
-      if (user.id === userId) {
-        return {
-          ...user,
-          permissions: user.permissions.map(permission => 
-            permission.page === page
-              ? { ...permission, [field]: value }
-              : permission
-          )
-        };
-      }
-      return user;
-    }));
+    try {
+      setLoading(true);
+
+      const { error } = await supabase
+        .from('system_users')
+        .delete()
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      await fetchUsers();
+    } catch (err) {
+      setError('Erro ao excluir usuário');
+      console.error('Erro:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetNewUserForm = () => {
+    setNewUser({
+      name: '',
+      email: '',
+      password: '',
+      company_id: '',
+      role: 'colab',
+      is_active: true
+    });
   };
 
   const filteredUsers = users.filter(user => {
-    const matchesCompany = selectedCompany ? user.companyId === selectedCompany : true;
+    const matchesCompany = selectedCompany ? user.company_id === selectedCompany : true;
     const matchesSearch = searchTerm.toLowerCase() === '' ? true : 
       user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase());
@@ -196,19 +194,26 @@ export const Users = () => {
   });
 
   return (
-    <div className="max-w-6xl mx-auto">
+    <div className="max-w-6xl mx-auto py-8">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-zinc-100">Gerenciamento de Usuários</h1>
           <p className="text-zinc-400 mt-1">Gerencie usuários e suas permissões de acesso</p>
         </div>
-        {currentUserRole === 'master' && (
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2">
-            <Plus size={20} />
-            Novo Usuário
-          </button>
-        )}
+        <button 
+          onClick={() => setShowNewUserModal(true)}
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
+        >
+          <Plus size={20} />
+          Novo Usuário
+        </button>
       </div>
+
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 mb-6">
+          <p className="text-red-400">{error}</p>
+        </div>
+      )}
 
       <div className="bg-zinc-900 rounded-xl overflow-hidden">
         <div className="p-4 border-b border-zinc-800">
@@ -221,7 +226,7 @@ export const Users = () => {
                   placeholder="Buscar usuários..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-10 pr-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 placeholder-zinc-500"
                 />
               </div>
             </div>
@@ -229,12 +234,12 @@ export const Users = () => {
               <select
                 value={selectedCompany}
                 onChange={(e) => setSelectedCompany(e.target.value)}
-                className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
               >
                 <option value="">Todas as empresas</option>
-                {COMPANIES.map(company => (
+                {companies.map(company => (
                   <option key={company.id} value={company.id}>
-                    {company.tradingName}
+                    {company.trading_name}
                   </option>
                 ))}
               </select>
@@ -256,109 +261,184 @@ export const Users = () => {
             </thead>
             <tbody>
               {filteredUsers.map((user) => (
-                <React.Fragment key={user.id}>
-                  <tr className="border-b border-zinc-800 hover:bg-zinc-800/50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center">
-                          <User size={16} className="text-zinc-400" />
-                        </div>
-                        <span className="text-zinc-300">{user.name}</span>
+                <tr key={user.id} className="border-b border-zinc-800 hover:bg-zinc-800/50">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center">
+                        <User size={16} className="text-zinc-400" />
                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-zinc-400">{user.email}</td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <Building size={16} className="text-zinc-500" />
-                        <span className="text-zinc-400">
-                          {COMPANIES.find(c => c.id === user.companyId)?.tradingName}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        <Shield size={16} className="text-zinc-500" />
-                        <span className={`px-2 py-1 rounded-full text-xs ${ROLE_COLORS[user.role]}`}>
-                          {ROLE_LABELS[user.role]}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 rounded-full text-xs ${
-                        user.isActive
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-red-500/20 text-red-400'
-                      }`}>
-                        {user.isActive ? 'Ativo' : 'Inativo'}
+                      <span className="text-zinc-300">{user.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-zinc-400">{user.email}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <Building size={16} className="text-zinc-500" />
+                      <span className="text-zinc-400">
+                        {companies.find(c => c.id === user.company_id)?.trading_name}
                       </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {(canEditUser(currentUserRole, user.role) || user.role === 'master') && (
-                          <>
-                            <button 
-                              onClick={() => handleEditUser(user)}
-                              className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400 hover:text-zinc-100"
-                            >
-                              <Edit size={16} />
-                            </button>
-                            {user.role !== 'master' && (
-                              <button className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400 hover:text-red-400">
-                                <Trash2 size={16} />
-                              </button>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                  {showPermissions === user.id && canEditPermissions(currentUserRole, user.role) && (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-4 bg-zinc-800/50">
-                        <div className="space-y-4">
-                          <h3 className="font-semibold text-zinc-300">Permissões de Acesso</h3>
-                          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                            {user.permissions.map((permission) => (
-                              <div 
-                                key={permission.page}
-                                className="flex items-center gap-2"
-                              >
-                                <div className="flex flex-col">
-                                  <label className="text-zinc-300 mb-1">{permission.page}</label>
-                                  <div className="flex gap-4">
-                                    <label className="flex items-center gap-2 text-sm">
-                                      <input
-                                        type="checkbox"
-                                        checked={permission.canAccess}
-                                        onChange={(e) => handleUpdatePermission(user.id, permission.page, 'canAccess', e.target.checked)}
-                                        className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
-                                      />
-                                      <span className="text-zinc-400">Acessar</span>
-                                    </label>
-                                    <label className="flex items-center gap-2 text-sm">
-                                      <input
-                                        type="checkbox"
-                                        checked={permission.canEdit}
-                                        onChange={(e) => handleUpdatePermission(user.id, permission.page, 'canEdit', e.target.checked)}
-                                        className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
-                                      />
-                                      <span className="text-zinc-400">Editar</span>
-                                    </label>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 rounded-full text-xs ${ROLE_COLORS[user.role]}`}>
+                      {ROLE_LABELS[user.role]}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-2 py-1 rounded-full text-xs ${
+                      user.is_active
+                        ? 'bg-green-500/20 text-green-400'
+                        : 'bg-red-500/20 text-red-400'
+                    }`}>
+                      {user.is_active ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => setEditingUser(user)}
+                        className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400 hover:text-zinc-100"
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteUser(user.id)}
+                        className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400 hover:text-red-400"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Modal de Novo Usuário */}
+      {showNewUserModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-semibold text-zinc-100">Novo Usuário</h2>
+              <button
+                onClick={() => {
+                  setShowNewUserModal(false);
+                  resetNewUserForm();
+                }}
+                className="text-zinc-400 hover:text-zinc-100"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1">
+                  Nome
+                </label>
+                <input
+                  type="text"
+                  value={newUser.name}
+                  onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1">
+                  Senha
+                </label>
+                <input
+                  type="password"
+                  value={newUser.password}
+                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1">
+                  Empresa
+                </label>
+                <select
+                  value={newUser.company_id}
+                  onChange={(e) => setNewUser({ ...newUser, company_id: e.target.value })}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                >
+                  <option value="">Selecione uma empresa</option>
+                  {companies.map(company => (
+                    <option key={company.id} value={company.id}>
+                      {company.trading_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1">
+                  Nível de Acesso
+                </label>
+                <select
+                  value={newUser.role}
+                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value as SystemUser['role'] })}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                >
+                  {Object.entries(ROLE_LABELS).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={newUser.is_active}
+                    onChange={(e) => setNewUser({ ...newUser, is_active: e.target.checked })}
+                    className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
+                  />
+                  <span className="text-zinc-400">Usuário Ativo</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowNewUserModal(false);
+                  resetNewUserForm();
+                }}
+                className="px-4 py-2 text-zinc-400 hover:text-zinc-100"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateUser}
+                disabled={!newUser.name || !newUser.email || !newUser.password || !newUser.company_id}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Criar Usuário
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Edição */}
       {editingUser && (
@@ -383,7 +463,7 @@ export const Users = () => {
                   type="text"
                   value={editingUser.name}
                   onChange={(e) => setEditingUser({ ...editingUser, name: e.target.value })}
-                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
                 />
               </div>
 
@@ -394,8 +474,8 @@ export const Users = () => {
                 <input
                   type="email"
                   value={editingUser.email}
-                  onChange={(e) => setEditingUser({ ...editingUser, email: e.target.value })}
-                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 opacity-50"
                 />
               </div>
 
@@ -404,13 +484,13 @@ export const Users = () => {
                   Empresa
                 </label>
                 <select
-                  value={editingUser.companyId}
-                  onChange={(e) => setEditingUser({ ...editingUser, companyId: e.target.value })}
-                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={editingUser.company_id}
+                  onChange={(e) => setEditingUser({ ...editingUser, company_id: e.target.value })}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
                 >
-                  {COMPANIES.map(company => (
+                  {companies.map(company => (
                     <option key={company.id} value={company.id}>
-                      {company.tradingName}
+                      {company.trading_name}
                     </option>
                   ))}
                 </select>
@@ -422,13 +502,8 @@ export const Users = () => {
                 </label>
                 <select
                   value={editingUser.role}
-                  onChange={(e) => setEditingUser({ 
-                    ...editingUser, 
-                    role: e.target.value as UserData['role'],
-                    permissions: generatePermissions(e.target.value as UserData['role'])
-                  })}
-                  disabled={editingUser.role === 'master' && currentUserRole !== 'master'}
-                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  onChange={(e) => setEditingUser({ ...editingUser, role: e.target.value as SystemUser['role'] })}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
                 >
                   {Object.entries(ROLE_LABELS).map(([value, label]) => (
                     <option key={value} value={value}>
@@ -442,8 +517,8 @@ export const Users = () => {
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    checked={editingUser.isActive}
-                    onChange={(e) => setEditingUser({ ...editingUser, isActive: e.target.checked })}
+                    checked={editingUser.is_active}
+                    onChange={(e) => setEditingUser({ ...editingUser, is_active: e.target.checked })}
                     className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
                   />
                   <span className="text-zinc-400">Usuário Ativo</span>
@@ -459,7 +534,7 @@ export const Users = () => {
                 Cancelar
               </button>
               <button
-                onClick={handleSaveUser}
+                onClick={handleUpdateUser}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
               >
                 Salvar Alterações

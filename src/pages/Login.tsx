@@ -1,15 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { CircuitBoard } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 export const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { signIn } = useAuth();
+  const { signIn, user } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Se já estiver autenticado, redireciona
+    if (user) {
+      navigate('/companies');
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,9 +26,25 @@ export const Login = () => {
 
     try {
       await signIn(email, password);
+      
+      // Verifica se o usuário existe no system_users
+      const { data: systemUser, error: systemUserError } = await supabase
+        .from('system_users')
+        .select('*')
+        .eq('email', email)
+        .single();
+
+      if (systemUserError) {
+        throw new Error('Usuário não encontrado no sistema');
+      }
+
+      if (!systemUser.is_active) {
+        throw new Error('Usuário inativo. Entre em contato com o administrador.');
+      }
+
       navigate('/companies');
     } catch (err) {
-      setError('Ocorreu um erro ao fazer login. Tente novamente.');
+      setError(err instanceof Error ? err.message : 'Ocorreu um erro ao fazer login. Tente novamente.');
     } finally {
       setLoading(false);
     }
