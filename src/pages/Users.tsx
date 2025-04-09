@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Edit, Trash2, Plus, Building, Search, Shield, X, Check } from 'lucide-react';
+import { User, Edit, Trash2, Plus, Building, Search, Shield, X, Check, Lock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface SystemUser {
@@ -16,6 +16,14 @@ interface Company {
   trading_name: string;
 }
 
+interface UserPermission {
+  id: string;
+  user_id: string;
+  page: string;
+  can_access: boolean;
+  can_edit: boolean;
+}
+
 const ROLE_LABELS = {
   master: 'Master',
   consultor: 'Consultor',
@@ -30,6 +38,17 @@ const ROLE_COLORS = {
   colab: 'bg-orange-500/20 text-orange-400'
 };
 
+const AVAILABLE_PAGES = [
+  { id: 'home', name: 'Início' },
+  { id: 'dashboard', name: 'Dashboard' },
+  { id: 'sales', name: 'Vendas' },
+  { id: 'analysis', name: 'Análise' },
+  { id: 'cashflow', name: 'Caixa' },
+  { id: 'dre', name: 'DRE' },
+  { id: 'users', name: 'Usuários' },
+  { id: 'settings', name: 'Configurações' }
+];
+
 export const Users = () => {
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -39,6 +58,9 @@ export const Users = () => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [showNewUserModal, setShowNewUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<SystemUser | null>(null);
+  const [userPermissions, setUserPermissions] = useState<UserPermission[]>([]);
 
   // Form state
   const [newUser, setNewUser] = useState({
@@ -54,6 +76,12 @@ export const Users = () => {
     fetchUsers();
     fetchCompanies();
   }, []);
+
+  useEffect(() => {
+    if (selectedUser) {
+      fetchUserPermissions(selectedUser.id);
+    }
+  }, [selectedUser]);
 
   const fetchUsers = async () => {
     try {
@@ -83,6 +111,20 @@ export const Users = () => {
       setCompanies(data || []);
     } catch (err) {
       console.error('Erro ao carregar empresas:', err);
+    }
+  };
+
+  const fetchUserPermissions = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_permissions')
+        .select('*')
+        .eq('user_id', userId);
+
+      if (error) throw error;
+      setUserPermissions(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar permissões:', err);
     }
   };
 
@@ -174,6 +216,44 @@ export const Users = () => {
     }
   };
 
+  const handleUpdatePermissions = async () => {
+    if (!selectedUser) return;
+
+    try {
+      setLoading(true);
+
+      // Primeiro, deletamos todas as permissões existentes do usuário
+      const { error: deleteError } = await supabase
+        .from('user_permissions')
+        .delete()
+        .eq('user_id', selectedUser.id);
+
+      if (deleteError) throw deleteError;
+
+      // Depois, inserimos as novas permissões
+      const { error: insertError } = await supabase
+        .from('user_permissions')
+        .insert(
+          userPermissions.map(permission => ({
+            user_id: selectedUser.id,
+            page: permission.page,
+            can_access: permission.can_access,
+            can_edit: permission.can_edit
+          }))
+        );
+
+      if (insertError) throw insertError;
+
+      setShowPermissionsModal(false);
+      setSelectedUser(null);
+    } catch (err) {
+      setError('Erro ao atualizar permissões');
+      console.error('Erro:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const resetNewUserForm = () => {
     setNewUser({
       name: '',
@@ -192,6 +272,35 @@ export const Users = () => {
       user.email.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesCompany && matchesSearch;
   });
+
+  const togglePermission = (page: string, type: 'access' | 'edit') => {
+    setUserPermissions(prevPermissions => {
+      const existingPermission = prevPermissions.find(p => p.page === page);
+      
+      if (existingPermission) {
+        return prevPermissions.map(p => 
+          p.page === page
+            ? {
+                ...p,
+                can_access: type === 'access' ? !p.can_access : p.can_access,
+                can_edit: type === 'edit' ? !p.can_edit : p.can_edit
+              }
+            : p
+        );
+      }
+
+      return [
+        ...prevPermissions,
+        {
+          id: crypto.randomUUID(),
+          user_id: selectedUser?.id || '',
+          page,
+          can_access: type === 'access',
+          can_edit: type === 'edit'
+        }
+      ];
+    });
+  };
 
   return (
     <div className="max-w-6xl mx-auto py-8">
@@ -295,6 +404,16 @@ export const Users = () => {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedUser(user);
+                          setShowPermissionsModal(true);
+                        }}
+                        className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400 hover:text-zinc-100"
+                        title="Configurar Permissões"
+                      >
+                        <Lock size={16} />
+                      </button>
                       <button
                         onClick={() => setEditingUser(user)}
                         className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400 hover:text-zinc-100"
@@ -538,6 +657,85 @@ export const Users = () => {
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
               >
                 Salvar Alterações
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Permissões */}
+      {showPermissionsModal && selectedUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-2xl">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-xl font-semibold text-zinc-100">Configurar Permissões</h2>
+                <p className="text-sm text-zinc-400 mt-1">
+                  Usuário: {selectedUser.name}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowPermissionsModal(false);
+                  setSelectedUser(null);
+                }}
+                className="text-zinc-400 hover:text-zinc-100"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {AVAILABLE_PAGES.map(page => {
+                const permission = userPermissions.find(p => p.page === page.name) || {
+                  can_access: false,
+                  can_edit: false
+                };
+
+                return (
+                  <div key={page.id} className="flex items-center justify-between p-4 bg-zinc-800/50 rounded-lg">
+                    <span className="text-zinc-200">{page.name}</span>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={permission.can_access}
+                          onChange={() => togglePermission(page.name, 'access')}
+                          className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800"
+                        />
+                        <span className="text-zinc-400">Visualizar</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={permission.can_edit}
+                          onChange={() => togglePermission(page.name, 'edit')}
+                          disabled={!permission.can_access}
+                          className="w-4 h-4 rounded border-zinc-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-zinc-800 disabled:opacity-50"
+                        />
+                        <span className="text-zinc-400">Editar</span>
+                      </label>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowPermissionsModal(false);
+                  setSelectedUser(null);
+                }}
+                className="px-4 py-2 text-zinc-400 hover:text-zinc-100"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleUpdatePermissions}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
+              >
+                Salvar Permissões
               </button>
             </div>
           </div>
