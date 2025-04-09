@@ -64,12 +64,27 @@ export const useDreAccounts = (selectedCompanyId: string) => {
     ));
   };
 
+  const deleteAccount = (accountId: string) => {
+    // Primeiro, encontre todas as contas filhas recursivamente
+    const findAllChildren = (parentId: string): string[] => {
+      const children = accounts.filter(acc => acc.parentAccountId === parentId);
+      return children.reduce((acc, child) => [...acc, child.id, ...findAllChildren(child.id)], [] as string[]);
+    };
+
+    const childrenIds = findAllChildren(accountId);
+    const allIdsToDelete = [accountId, ...childrenIds];
+
+    // Remove a conta e todas as suas filhas
+    setAccounts(accounts.filter(acc => !allIdsToDelete.includes(acc.id)));
+  };
+
   return {
     accounts,
     setAccounts,
     getChildAccounts,
     moveAccount,
     toggleAccountStatus,
-    toggleAccountExpansion
+    toggleAccountExpansion,
+    deleteAccount
   };
 };

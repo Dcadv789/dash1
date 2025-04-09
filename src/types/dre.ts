@@ -13,4 +13,5 @@ export interface DreAccount {
   isActive: boolean;
   isExpanded?: boolean;
   level?: number;
+  sign?: 'positive' | 'negative';
 }

@@ -38,6 +38,7 @@ export const DreAccountModal = ({
   const [selectedParentAccount, setSelectedParentAccount] = useState<string | null>(null);
   const [categorySearch, setCategorySearch] = useState('');
   const [indicatorSearch, setIndicatorSearch] = useState('');
+  const [blankAccountSign, setBlankAccountSign] = useState<'positive' | 'negative'>('positive');
 
   useEffect(() => {
     if (editingAccount) {
@@ -48,6 +49,7 @@ export const DreAccountModal = ({
       setSelectedIndicator(editingAccount.indicatorId || null);
       setSelectedAccounts(editingAccount.selectedAccounts || []);
       setSelectedParentAccount(editingAccount.parentAccountId || null);
+      setBlankAccountSign(editingAccount.sign || 'positive');
     } else {
       resetForm();
     }
@@ -63,6 +65,7 @@ export const DreAccountModal = ({
     setSelectedParentAccount(null);
     setCategorySearch('');
     setIndicatorSearch('');
+    setBlankAccountSign('positive');
   };
 
   const handleSave = () => {
@@ -81,7 +84,8 @@ export const DreAccountModal = ({
       parentAccountId: selectedParentAccount,
       categoryIds: accountType === 'category' ? selectedCategories : undefined,
       indicatorId: accountType === 'indicator' ? selectedIndicator : undefined,
-      selectedAccounts: accountType === 'total' ? selectedAccounts : undefined
+      selectedAccounts: accountType === 'total' ? selectedAccounts : undefined,
+      sign: accountType === 'blank' ? blankAccountSign : undefined
     };
 
     onSave(newAccount);
@@ -309,6 +313,34 @@ export const DreAccountModal = ({
                       <span className="text-zinc-300">{account.code} - {account.name}</span>
                     </label>
                   ))}
+              </div>
+            </div>
+          )}
+
+          {accountType === 'blank' && (
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-2">
+                Sinal da Conta
+              </label>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={blankAccountSign === 'positive'}
+                    onChange={() => setBlankAccountSign('positive')}
+                    className="text-blue-600"
+                  />
+                  <span className="text-zinc-300">Positivo (+)</span>
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    checked={blankAccountSign === 'negative'}
+                    onChange={() => setBlankAccountSign('negative')}
+                    className="text-blue-600"
+                  />
+                  <span className="text-zinc-300">Negativo (-)</span>
+                </label>
               </div>
             </div>
           )}

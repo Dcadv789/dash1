@@ -1,5 +1,5 @@
 import React from 'react';
-import { Plus, Minus, Equal, Power, PencilIcon, ArrowUp, ArrowDown, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, Minus, Equal, Power, PencilIcon, ArrowUp, ArrowDown, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import { DreAccount } from '../../types/dre';
 
 interface DreAccountRowProps {
@@ -9,8 +9,16 @@ interface DreAccountRowProps {
   onToggleStatus: (accountId: string) => void;
   onStartEditing: (account: DreAccount) => void;
   onMoveAccount: (accountId: string, direction: 'up' | 'down') => void;
+  onDelete: (accountId: string) => void;
   childAccounts: DreAccount[];
 }
+
+const TYPE_LABELS = {
+  revenue: 'Receita',
+  expense: 'Despesa',
+  total: 'Totalizador',
+  blank: 'Em Branco'
+};
 
 export const DreAccountRow = ({
   account,
@@ -19,6 +27,7 @@ export const DreAccountRow = ({
   onToggleStatus,
   onStartEditing,
   onMoveAccount,
+  onDelete,
   childAccounts
 }: DreAccountRowProps) => {
   const hasChildren = childAccounts.length > 0;
@@ -26,7 +35,7 @@ export const DreAccountRow = ({
   return (
     <React.Fragment>
       <tr className={`border-b border-zinc-800 hover:bg-zinc-800/50 ${!account.isActive && 'opacity-50'}`}>
-        <td className="px-6 py-4">
+        <td className="px-6 py-4 w-48">
           <div className="flex items-center" style={{ paddingLeft: `${level * 20}px` }}>
             {hasChildren ? (
               <button
@@ -41,13 +50,27 @@ export const DreAccountRow = ({
             <span className="text-zinc-400 font-mono">{account.code}</span>
           </div>
         </td>
-        <td className="px-6 py-4">
+        <td className="px-2 py-4">
           <div className="flex items-center gap-2">
             {account.type === 'revenue' && <Plus size={16} className="text-green-400" />}
             {account.type === 'expense' && <Minus size={16} className="text-red-400" />}
             {account.type === 'total' && <Equal size={16} className="text-blue-400" />}
+            {account.type === 'blank' && (account.sign === 'positive' ? 
+              <Plus size={16} className="text-zinc-400" /> : 
+              <Minus size={16} className="text-zinc-400" />
+            )}
             <span className="text-zinc-100">{account.name}</span>
           </div>
+        </td>
+        <td className="px-6 py-4 text-center">
+          <span className={`px-3 py-1 rounded-full text-xs ${
+            account.type === 'revenue' ? 'bg-green-500/20 text-green-400' :
+            account.type === 'expense' ? 'bg-red-500/20 text-red-400' :
+            account.type === 'total' ? 'bg-blue-500/20 text-blue-400' :
+            'bg-zinc-500/20 text-zinc-400'
+          }`}>
+            {TYPE_LABELS[account.type]}
+          </span>
         </td>
         <td className="px-6 py-4 text-right">
           <div className="flex items-center justify-end gap-2">
@@ -64,6 +87,12 @@ export const DreAccountRow = ({
               className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
             >
               <PencilIcon size={16} />
+            </button>
+            <button
+              onClick={() => onDelete(account.id)}
+              className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400 hover:text-red-400"
+            >
+              <Trash2 size={16} />
             </button>
             <button
               onClick={() => onMoveAccount(account.id, 'up')}
@@ -89,7 +118,8 @@ export const DreAccountRow = ({
           onToggleStatus={onToggleStatus}
           onStartEditing={onStartEditing}
           onMoveAccount={onMoveAccount}
-          childAccounts={[]} // Você precisará implementar a lógica para buscar os filhos do filho
+          onDelete={onDelete}
+          childAccounts={[]}
         />
       ))}
     </React.Fragment>

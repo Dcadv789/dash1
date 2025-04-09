@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Plus, Copy } from 'lucide-react';
+import { Plus, Copy, Trash2 } from 'lucide-react';
 import { DreAccountRow } from '../components/dre/DreAccountRow';
 import { DreAccountModal } from '../components/dre/DreAccountModal';
 import { DreCopyModal } from '../components/dre/DreCopyModal';
@@ -64,7 +64,8 @@ export const Dre = () => {
     getChildAccounts,
     moveAccount,
     toggleAccountStatus,
-    toggleAccountExpansion
+    toggleAccountExpansion,
+    deleteAccount
   } = useDreAccounts(selectedCompanyId);
 
   const handleCopyAccounts = () => {
@@ -96,12 +97,13 @@ export const Dre = () => {
     if (!selectedCompany) return [];
 
     return accounts.filter(acc => {
+      if (acc.companyId !== selectedCompanyId) return false;
+      if (acc.type !== 'total' && acc.type !== 'blank') return false;
+      if (acc.id === currentAccountId) return false;
+      if (isDescendant(acc.id, currentAccountId)) return false;
+
       const level = getAccountLevel(acc.id);
-      return acc.companyId === selectedCompanyId && 
-             (acc.type === 'total' || acc.type === 'blank') && 
-             level < (selectedCompany.maxDreLevel - 1) &&
-             acc.id !== currentAccountId && 
-             !isDescendant(acc.id, currentAccountId);
+      return level < (selectedCompany.maxDreLevel - 1);
     });
   };
 
@@ -134,6 +136,12 @@ export const Dre = () => {
     }
     setShowNewAccountModal(false);
     setEditingAccount(null);
+  };
+
+  const handleDeleteAccount = (accountId: string) => {
+    if (window.confirm('Tem certeza que deseja excluir esta conta?')) {
+      deleteAccount(accountId);
+    }
   };
 
   const sortedAccounts = [...accounts]
@@ -217,7 +225,8 @@ export const Dre = () => {
               <thead>
                 <tr className="border-b border-zinc-800">
                   <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Código</th>
-                  <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Conta</th>
+                  <th className="px-2 py-4 text-left text-sm font-semibold text-zinc-400">Conta</th>
+                  <th className="px-6 py-4 text-center text-sm font-semibold text-zinc-400">Tipo</th>
                   <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-400">Ações</th>
                 </tr>
               </thead>
@@ -231,6 +240,7 @@ export const Dre = () => {
                     onToggleStatus={toggleAccountStatus}
                     onStartEditing={setEditingAccount}
                     onMoveAccount={moveAccount}
+                    onDelete={handleDeleteAccount}
                     childAccounts={getChildAccounts(account.id)}
                   />
                 ))}
@@ -246,7 +256,7 @@ export const Dre = () => {
 
       {/* Modais */}
       <DreAccountModal
-        isOpen={showNewAccountModal}
+        isOpen={showNewAccountModal || editingAccount !== null}
         onClose={() => {
           setShowNewAccountModal(false);
           setEditingAccount(null);
