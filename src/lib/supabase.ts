@@ -1,10 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import { Database } from '../types/supabase';
 
-const supabaseUrl = 'https://xunylnlxcpibmnhoavdy.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh1bnllbG54Y3BpYm1uaG9hdmR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQyMDE5ODYsImV4cCI6MjA1OTc3Nzk4Nn0.5nG4JXyDHdCqeJHK57rOZMPJzCN89cBSNjGthWyGX3s';
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Create Supabase client with retryable fetch
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing Supabase environment variables');
+}
+
+// Create Supabase client with enhanced error handling and retries
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
@@ -23,21 +27,38 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
       eventsPerSecond: 10
     }
   },
-  // Add retry configuration
-  fetch: (url, options) => {
-    return fetch(url, {
-      ...options,
-      credentials: 'include' // Add credentials inclusion
-    }).catch(error => {
-      if (error.name === 'TypeError' && error.message === 'Failed to fetch') {
-        // Retry the request once
-        return fetch(url, {
+  fetch: async (url, options = {}) => {
+    const maxRetries = 3;
+    let attempt = 0;
+    
+    while (attempt < maxRetries) {
+      try {
+        const response = await fetch(url, {
           ...options,
-          credentials: 'include'
+          credentials: 'include',
+          headers: {
+            ...options.headers,
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+          }
         });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        return response;
+      } catch (error) {
+        attempt++;
+        if (attempt === maxRetries) {
+          console.error('Supabase fetch error:', error);
+          throw error;
+        }
+        // Wait before retrying (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
       }
-      throw error;
-    });
+    }
+    throw new Error('Max retries reached');
   }
 });
 
@@ -46,5 +67,8 @@ supabase.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
     // Clear any cached data
     localStorage.removeItem('supabase.auth.token');
+    // Clear any other cached data if needed
+    localStorage.clear();
+    sessionStorage.clear();
   }
 });
