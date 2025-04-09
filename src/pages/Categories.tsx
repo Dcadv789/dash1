@@ -13,6 +13,8 @@ interface Company {
   is_active: boolean;
 }
 
+type CategoryFilter = 'all' | 'revenue' | 'expense';
+
 export const Categories = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
@@ -24,6 +26,7 @@ export const Categories = () => {
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyFromCompanyId, setCopyFromCompanyId] = useState<string>('');
   const [copyToCompanyId, setCopyToCompanyId] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const { user } = useAuth();
 
   useEffect(() => {
@@ -151,16 +154,16 @@ export const Categories = () => {
     }
   };
 
-  const handleUpdateCategory = async (categoryId: string, name: string) => {
+  const handleUpdateCategory = async (categoryId: string, name: string, groupId: string | null) => {
     try {
       const { error } = await supabase
         .from('categories')
-        .update({ name })
+        .update({ name, group_id: groupId })
         .eq('id', categoryId);
 
       if (error) throw error;
       setCategories(categories.map(cat => 
-        cat.id === categoryId ? { ...cat, name } : cat
+        cat.id === categoryId ? { ...cat, name, group_id: groupId } : cat
       ));
     } catch (err) {
       console.error('Erro ao atualizar categoria:', err);
@@ -278,14 +281,20 @@ export const Categories = () => {
     );
   }
 
-  const filteredCategories = selectedCompanyId
-    ? categories.filter(cat => 
-        companyCategories.some(cc => 
+  const filteredCategories = categories.filter(cat => {
+    const matchesCompany = selectedCompanyId
+      ? companyCategories.some(cc => 
           cc.category_id === cat.id && 
           cc.company_id === selectedCompanyId
         )
-      )
-    : categories;
+      : true;
+
+    const matchesType = categoryFilter === 'all'
+      ? true
+      : cat.type === categoryFilter;
+
+    return matchesCompany && matchesType;
+  });
 
   return (
     <div className="max-w-6xl mx-auto py-8">
@@ -307,57 +316,101 @@ export const Categories = () => {
             </button>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-2">
-              Filtrar por Empresa
-            </label>
-            <select
-              value={selectedCompanyId}
-              onChange={(e) => setSelectedCompanyId(e.target.value)}
-              className="bg-zinc-800 text-zinc-100 rounded-lg px-4 py-3 w-full md:w-96"
-            >
-              <option value="">Todas as empresas</option>
-              {companies.map(company => (
-                <option key={company.id} value={company.id}>
-                  {company.trading_name} - {company.name}
-                </option>
-              ))}
-            </select>
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-zinc-400 mb-2">
+                Filtrar por Empresa
+              </label>
+              <select
+                value={selectedCompanyId}
+                onChange={(e) => setSelectedCompanyId(e.target.value)}
+                className="bg-zinc-800 text-zinc-100 rounded-lg px-4 py-3 w-full appearance-none"
+              >
+                <option value="">Todas as empresas</option>
+                {companies.map(company => (
+                  <option key={company.id} value={company.id}>
+                    {company.trading_name} - {company.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-2">
+                Tipo
+              </label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setCategoryFilter('all')}
+                  className={`px-4 py-3 rounded-lg ${
+                    categoryFilter === 'all'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                  }`}
+                >
+                  Todos
+                </button>
+                <button
+                  onClick={() => setCategoryFilter('revenue')}
+                  className={`px-4 py-3 rounded-lg ${
+                    categoryFilter === 'revenue'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                  }`}
+                >
+                  Receitas
+                </button>
+                <button
+                  onClick={() => setCategoryFilter('expense')}
+                  className={`px-4 py-3 rounded-lg ${
+                    categoryFilter === 'expense'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                  }`}
+                >
+                  Despesas
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Conteúdo Principal */}
       <div className="space-y-8">
-        <CategorySection
-          title="Receitas"
-          type="revenue"
-          groups={categoryGroups}
-          categories={filteredCategories}
-          companies={companies}
-          onCreateGroup={handleCreateGroup}
-          onCreateCategory={handleCreateCategory}
-          onEditGroup={handleEditGroup}
-          onToggleStatus={handleToggleCategoryStatus}
-          onUpdateCategory={handleUpdateCategory}
-          onDeleteCategory={handleDeleteCategory}
-          getCategoryStatus={getCategoryStatus}
-        />
+        {(categoryFilter === 'all' || categoryFilter === 'revenue') && (
+          <CategorySection
+            title="Receitas"
+            type="revenue"
+            groups={categoryGroups}
+            categories={filteredCategories}
+            companies={companies}
+            onCreateGroup={handleCreateGroup}
+            onCreateCategory={handleCreateCategory}
+            onEditGroup={handleEditGroup}
+            onToggleStatus={handleToggleCategoryStatus}
+            onUpdateCategory={handleUpdateCategory}
+            onDeleteCategory={handleDeleteCategory}
+            getCategoryStatus={getCategoryStatus}
+          />
+        )}
 
-        <CategorySection
-          title="Despesas"
-          type="expense"
-          groups={categoryGroups}
-          categories={filteredCategories}
-          companies={companies}
-          onCreateGroup={handleCreateGroup}
-          onCreateCategory={handleCreateCategory}
-          onEditGroup={handleEditGroup}
-          onToggleStatus={handleToggleCategoryStatus}
-          onUpdateCategory={handleUpdateCategory}
-          onDeleteCategory={handleDeleteCategory}
-          getCategoryStatus={getCategoryStatus}
-        />
+        {(categoryFilter === 'all' || categoryFilter === 'expense') && (
+          <CategorySection
+            title="Despesas"
+            type="expense"
+            groups={categoryGroups}
+            categories={filteredCategories}
+            companies={companies}
+            onCreateGroup={handleCreateGroup}
+            onCreateCategory={handleCreateCategory}
+            onEditGroup={handleEditGroup}
+            onToggleStatus={handleToggleCategoryStatus}
+            onUpdateCategory={handleUpdateCategory}
+            onDeleteCategory={handleDeleteCategory}
+            getCategoryStatus={getCategoryStatus}
+          />
+        )}
       </div>
 
       <CopyModal

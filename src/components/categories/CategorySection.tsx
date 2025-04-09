@@ -19,7 +19,7 @@ interface CategorySectionProps {
   onCreateCategory: (type: 'revenue' | 'expense', groupId?: string) => void;
   onEditGroup: (groupId: string, newName: string) => void;
   onToggleStatus: (categoryId: string, companyId: string) => void;
-  onUpdateCategory: (categoryId: string, name: string) => void;
+  onUpdateCategory: (categoryId: string, name: string, groupId: string | null) => void;
   onDeleteCategory: (categoryId: string) => void;
   getCategoryStatus: (categoryId: string, companyId: string) => boolean;
 }
@@ -66,6 +66,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
                 groupId={group.id}
                 categories={groupCategories}
                 companies={companies}
+                allGroups={groups}
                 onAddCategory={(groupId) => onCreateCategory(type, groupId)}
                 onEditGroup={onEditGroup}
                 onToggleStatus={onToggleStatus}
@@ -80,6 +81,7 @@ export const CategorySection: React.FC<CategorySectionProps> = ({
           groupName="Sem Grupo"
           categories={categories.filter(cat => cat.type === type && !cat.group_id)}
           companies={companies}
+          allGroups={groups}
           onAddCategory={() => onCreateCategory(type)}
           onEditGroup={() => {}}
           onToggleStatus={onToggleStatus}

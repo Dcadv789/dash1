@@ -8,15 +8,22 @@ interface Company {
   name: string;
 }
 
+interface CategoryGroup {
+  id: string;
+  name: string;
+  type: 'revenue' | 'expense';
+}
+
 interface CategoryGroupProps {
   groupName: string;
   groupId?: string;
   categories: Category[];
   companies: Company[];
+  allGroups: CategoryGroup[];
   onAddCategory: (groupId?: string) => void;
   onEditGroup: (groupId: string, newName: string) => void;
   onToggleStatus: (categoryId: string, companyId: string) => void;
-  onUpdateCategory: (categoryId: string, name: string) => void;
+  onUpdateCategory: (categoryId: string, name: string, groupId: string | null) => void;
   onDeleteCategory: (categoryId: string) => void;
   getCategoryStatus: (categoryId: string, companyId: string) => boolean;
 }
@@ -26,6 +33,7 @@ export const CategoryGroup: React.FC<CategoryGroupProps> = ({
   groupId,
   categories,
   companies,
+  allGroups,
   onAddCategory,
   onEditGroup,
   onToggleStatus,
@@ -35,20 +43,23 @@ export const CategoryGroup: React.FC<CategoryGroupProps> = ({
 }) => {
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [isEditingGroup, setIsEditingGroup] = useState(false);
   const [newGroupName, setNewGroupName] = useState(groupName);
 
   const handleStartEdit = (category: Category) => {
     setEditingCategory(category.id);
     setNewCategoryName(category.name);
+    setSelectedGroupId(category.group_id);
   };
 
   const handleSaveEdit = (categoryId: string) => {
     if (newCategoryName.trim()) {
-      onUpdateCategory(categoryId, newCategoryName);
+      onUpdateCategory(categoryId, newCategoryName, selectedGroupId);
     }
     setEditingCategory(null);
     setNewCategoryName('');
+    setSelectedGroupId(null);
   };
 
   const handleSaveGroupEdit = () => {
@@ -129,6 +140,21 @@ export const CategoryGroup: React.FC<CategoryGroupProps> = ({
                       className="bg-zinc-700 px-2 py-1 rounded text-zinc-100"
                       autoFocus
                     />
+                    <select
+                      value={selectedGroupId || ''}
+                      onChange={(e) => setSelectedGroupId(e.target.value || null)}
+                      className="bg-zinc-700 px-2 py-1 rounded text-zinc-100 appearance-none"
+                    >
+                      <option value="">Sem Grupo</option>
+                      {allGroups
+                        .filter(g => g.type === category.type)
+                        .map(group => (
+                          <option key={group.id} value={group.id}>
+                            {group.name}
+                          </option>
+                        ))
+                      }
+                    </select>
                     <button
                       onClick={() => handleSaveEdit(category.id)}
                       className="p-1 hover:bg-zinc-700 rounded-lg text-green-400"
