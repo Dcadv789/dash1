@@ -9,8 +9,12 @@ interface DreAccount {
   displayOrder: number;
   companyId: string;
   isEditing?: boolean;
-  categoryId?: string; // ID da categoria vinculada
-  sumGroups?: string[]; // IDs dos grupos a serem somados
+  categoryId?: string;
+  indicatorId?: string;
+  selectedAccounts?: {
+    id: string;
+    operation: 'add' | 'subtract';
+  }[];
 }
 
 interface Category {
@@ -19,6 +23,16 @@ interface Category {
   name: string;
   type: 'revenue' | 'expense';
   groupId: string | null;
+  companyId: string;
+  isActive: boolean;
+}
+
+interface Indicator {
+  id: string;
+  code: string;
+  name: string;
+  formula: string;
+  displayOrder: number;
   companyId: string;
   isActive: boolean;
 }
@@ -91,6 +105,10 @@ export const Dre = () => {
     loadFromStorage('categories', [])
   );
 
+  const [indicators] = useState<Indicator[]>(() => 
+    loadFromStorage('indicators', [])
+  );
+
   const [groups] = useState<CategoryGroup[]>(() => 
     loadFromStorage('category_groups', [])
   );
@@ -102,9 +120,16 @@ export const Dre = () => {
   const [editingOrder, setEditingOrder] = useState<string | null>(null);
   const [newOrder, setNewOrder] = useState<number>(0);
   const [showNewAccountModal, setShowNewAccountModal] = useState(false);
-  const [newAccountType, setNewAccountType] = useState<'category' | 'total'>('category');
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
+  const [newAccountType, setNewAccountType] = useState<'category' | 'indicator' | 'total'>('category');
+  const [categoryType, setCategoryType] = useState<'revenue' | 'expense'>('revenue');
+  const [categorySearch, setCategorySearch] = useState('');
+  const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
+  const [indicatorSearch, setIndicatorSearch] = useState('');
+  const [selectedIndicator, setSelectedIndicator] = useState<Indicator | null>(null);
+  const [selectedDreAccounts, setSelectedDreAccounts] = useState<{
+    id: string;
+    operation: 'add' | 'subtract';
+  }[]>([]);
   const [newAccountName, setNewAccountName] = useState('');
 
   useEffect(() => {
@@ -169,35 +194,54 @@ export const Dre = () => {
     setAccounts(newAccounts);
   };
 
+  const filteredCategories = categories.filter(category => 
+    category.companyId === selectedCompanyId &&
+    category.type === categoryType &&
+    category.isActive &&
+    category.name.toLowerCase().includes(categorySearch.toLowerCase())
+  );
+
+  const filteredIndicators = indicators.filter(indicator =>
+    indicator.companyId === selectedCompanyId &&
+    indicator.isActive &&
+    indicator.name.toLowerCase().includes(indicatorSearch.toLowerCase())
+  );
+
   const handleAddAccount = () => {
-    if (!selectedCompanyId) return;
+    if (!selectedCompanyId || !newAccountName) return;
 
     const maxOrder = Math.max(...accounts.map(acc => acc.displayOrder), 0);
     const newAccount: DreAccount = {
       id: Math.random().toString(36).substr(2, 9),
       code: `A${(accounts.length + 1).toString().padStart(2, '0')}`,
-      name: newAccountName || (newAccountType === 'category' 
-        ? categories.find(c => c.id === selectedCategory)?.name || ''
-        : 'Novo Totalizador'),
-      type: newAccountType === 'category' 
-        ? (categories.find(c => c.id === selectedCategory)?.type || 'revenue')
-        : 'total',
+      name: newAccountName,
+      type: newAccountType === 'category' ? categoryType : 'total',
       displayOrder: maxOrder + 1,
       companyId: selectedCompanyId,
-      categoryId: newAccountType === 'category' ? selectedCategory : undefined,
-      sumGroups: newAccountType === 'total' ? selectedGroups : undefined
     };
 
+    if (newAccountType === 'category' && selectedCategories.length > 0) {
+      newAccount.categoryId = selectedCategories[0].id;
+    } else if (newAccountType === 'indicator' && selectedIndicator) {
+      newAccount.indicatorId = selectedIndicator.id;
+    } else if (newAccountType === 'total') {
+      newAccount.selectedAccounts = selectedDreAccounts;
+    }
+
     setAccounts([...accounts, newAccount]);
-    setShowNewAccountModal(false);
     resetNewAccountForm();
+    setShowNewAccountModal(false);
   };
 
   const resetNewAccountForm = () => {
     setNewAccountType('category');
-    setSelectedCategory('');
-    setSelectedGroups([]);
     setNewAccountName('');
+    setCategoryType('revenue');
+    setCategorySearch('');
+    setSelectedCategories([]);
+    setIndicatorSearch('');
+    setSelectedIndicator(null);
+    setSelectedDreAccounts([]);
   };
 
   const renderAccountTypeIcon = (type: 'revenue' | 'expense' | 'total') => {
@@ -374,6 +418,19 @@ export const Dre = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-zinc-400 mb-2">
+                  Nome da Conta
+                </label>
+                <input
+                  type="text"
+                  value={newAccountName}
+                  onChange={(e) => setNewAccountName(e.target.value)}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                  placeholder="Nome da conta"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">
                   Tipo de Conta
                 </label>
                 <div className="flex gap-4">
@@ -389,6 +446,15 @@ export const Dre = () => {
                   <label className="flex items-center gap-2">
                     <input
                       type="radio"
+                      checked={newAccountType === 'indicator'}
+                      onChange={() => setNewAccountType('indicator')}
+                      className="text-blue-600"
+                    />
+                    <span className="text-zinc-300">Indicador</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
                       checked={newAccountType === 'total'}
                       onChange={() => setNewAccountType('total')}
                       className="text-blue-600"
@@ -398,67 +464,197 @@ export const Dre = () => {
                 </div>
               </div>
 
-              {newAccountType === 'category' ? (
-                <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-2">
-                    Selecione uma Categoria
-                  </label>
-                  <select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
-                  >
-                    <option value="">Selecione...</option>
-                    {categories
-                      .filter(c => c.companyId === selectedCompanyId && c.isActive)
-                      .map(category => (
-                        <option key={category.id} value={category.id}>
-                          {category.code} - {category.name}
-                        </option>
-                      ))}
-                  </select>
-                </div>
-              ) : (
-                <>
+              {newAccountType === 'category' && (
+                <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-zinc-400 mb-2">
-                      Nome do Totalizador
+                      Tipo de Categoria
+                    </label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          checked={categoryType === 'revenue'}
+                          onChange={() => setCategoryType('revenue')}
+                          className="text-blue-600"
+                        />
+                        <span className="text-zinc-300">Receita</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          checked={categoryType === 'expense'}
+                          onChange={() => setCategoryType('expense')}
+                          className="text-blue-600"
+                        />
+                        <span className="text-zinc-300">Despesa</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-400 mb-2">
+                      Buscar Categoria
                     </label>
                     <input
                       type="text"
-                      value={newAccountName}
-                      onChange={(e) => setNewAccountName(e.target.value)}
+                      value={categorySearch}
+                      onChange={(e) => setCategorySearch(e.target.value)}
                       className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
-                      placeholder="Ex: Resultado Operacional"
+                      placeholder="Digite para buscar..."
                     />
+                    
+                    {categorySearch && (
+                      <div className="mt-2 max-h-40 overflow-y-auto bg-zinc-800 rounded-lg">
+                        {filteredCategories.map(category => (
+                          <button
+                            key={category.id}
+                            onClick={() => {
+                              setSelectedCategories([category]);
+                              setCategorySearch('');
+                            }}
+                            className="w-full px-4 py-2 text-left hover:bg-zinc-700 text-zinc-300"
+                          >
+                            {category.code} - {category.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">
-                      Selecione os Grupos para Somar
-                    </label>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {groups
-                        .filter(g => g.companyId === selectedCompanyId)
-                        .map(group => (
-                          <label key={group.id} className="flex items-center gap-2">
+
+                  {selectedCategories.length > 0 && (
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-zinc-400 mb-2">
+                        Categoria Selecionada
+                      </label>
+                      <div className="bg-zinc-800 p-2 rounded-lg">
+                        {selectedCategories.map(category => (
+                          <div key={category.id} className="flex items-center justify-between">
+                            <span className="text-zinc-300">
+                              {category.code} - {category.name}
+                            </span>
+                            <button
+                              onClick={() => setSelectedCategories([])}
+                              className="text-zinc-400 hover:text-red-400"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {newAccountType === 'indicator' && (
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">
+                    Buscar Indicador
+                  </label>
+                  <input
+                    type="text"
+                    value={indicatorSearch}
+                    onChange={(e) => setIndicatorSearch(e.target.value)}
+                    className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                    placeholder="Digite para buscar..."
+                  />
+                  
+                  {indicatorSearch && (
+                    <div className="mt-2 max-h-40 overflow-y-auto bg-zinc-800 rounded-lg">
+                      {filteredIndicators.map(indicator => (
+                        <button
+                          key={indicator.id}
+                          onClick={() => {
+                            setSelectedIndicator(indicator);
+                            setIndicatorSearch('');
+                          }}
+                          className="w-full px-4 py-2 text-left hover:bg-zinc-700 text-zinc-300"
+                        >
+                          {indicator.code} - {indicator.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {selectedIndicator && (
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-zinc-400 mb-2">
+                        Indicador Selecionado
+                      </label>
+                      <div className="bg-zinc-800 p-2 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <span className="text-zinc-300">
+                            {selectedIndicator.code} - {selectedIndicator.name}
+                          </span>
+                          <button
+                            onClick={() => setSelectedIndicator(null)}
+                            className="text-zinc-400 hover:text-red-400"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {newAccountType === 'total' && (
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-2">
+                    Selecionar Contas
+                  </label>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {accounts
+                      .filter(acc => acc.companyId === selectedCompanyId)
+                      .map(account => {
+                        const isSelected = selectedDreAccounts.some(sa => sa.id === account.id);
+                        const operation = isSelected 
+                          ? selectedDreAccounts.find(sa => sa.id === account.id)?.operation
+                          : null;
+
+                        return (
+                          <div key={account.id} className="flex items-center gap-2 p-2 bg-zinc-800 rounded-lg">
                             <input
                               type="checkbox"
-                              checked={selectedGroups.includes(group.id)}
+                              checked={isSelected}
                               onChange={(e) => {
                                 if (e.target.checked) {
-                                  setSelectedGroups([...selectedGroups, group.id]);
+                                  setSelectedDreAccounts([...selectedDreAccounts, {
+                                    id: account.id,
+                                    operation: account.type === 'revenue' ? 'add' : 'subtract'
+                                  }]);
                                 } else {
-                                  setSelectedGroups(selectedGroups.filter(id => id !== group.id));
+                                  setSelectedDreAccounts(selectedDreAccounts.filter(sa => sa.id !== account.id));
                                 }
                               }}
-                              className="text-blue-600 rounded"
+                              className="text-blue-600"
                             />
-                            <span className="text-zinc-300">{group.name}</span>
-                          </label>
-                        ))}
-                    </div>
+                            <span className="text-zinc-300 flex-1">
+                              {account.code} - {account.name}
+                            </span>
+                            {isSelected && (
+                              <select
+                                value={operation}
+                                onChange={(e) => {
+                                  setSelectedDreAccounts(selectedDreAccounts.map(sa =>
+                                    sa.id === account.id
+                                      ? { ...sa, operation: e.target.value as 'add' | 'subtract' }
+                                      : sa
+                                  ));
+                                }}
+                                className="bg-zinc-700 text-zinc-300 rounded px-2 py-1"
+                              >
+                                <option value="add">Somar</option>
+                                <option value="subtract">Subtrair</option>
+                              </select>
+                            )}
+                          </div>
+                        );
+                      })}
                   </div>
-                </>
+                </div>
               )}
             </div>
 
@@ -475,8 +671,10 @@ export const Dre = () => {
               <button
                 onClick={handleAddAccount}
                 disabled={
-                  (newAccountType === 'category' && !selectedCategory) ||
-                  (newAccountType === 'total' && (!newAccountName || selectedGroups.length === 0))
+                  !newAccountName ||
+                  (newAccountType === 'category' && selectedCategories.length === 0) ||
+                  (newAccountType === 'indicator' && !selectedIndicator) ||
+                  (newAccountType === 'total' && selectedDreAccounts.length === 0)
                 }
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
