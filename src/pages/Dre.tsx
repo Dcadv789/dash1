@@ -15,6 +15,7 @@ interface DreAccount {
   parentAccountId?: string | null;
   isActive: boolean;
   isExpanded?: boolean;
+  level?: number;
 }
 
 interface Category {
@@ -43,6 +44,7 @@ interface Company {
   tradingName: string;
   cnpj: string;
   isActive: boolean;
+  maxDreLevel?: number;
 }
 
 const loadFromStorage = (key: string, defaultValue: any) => {
@@ -62,21 +64,24 @@ export const Dre = () => {
         name: 'TechCorp Solutions Ltda',
         tradingName: 'TechCorp',
         cnpj: '12.345.678/0001-90',
-        isActive: true
+        isActive: true,
+        maxDreLevel: 3
       },
       {
         id: 'COMP002',
         name: 'Inovação Digital S.A.',
         tradingName: 'InovaTech',
         cnpj: '23.456.789/0001-01',
-        isActive: true
+        isActive: true,
+        maxDreLevel: 3
       },
       {
         id: 'COMP003',
         name: 'Global Software Enterprise',
         tradingName: 'GSE',
         cnpj: '34.567.890/0001-12',
-        isActive: true
+        isActive: true,
+        maxDreLevel: 3
       }
     ])
   );
@@ -97,8 +102,6 @@ export const Dre = () => {
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyFromCompanyId, setCopyFromCompanyId] = useState<string>('');
   const [copyToCompanyId, setCopyToCompanyId] = useState<string>('');
-  const [editingOrder, setEditingOrder] = useState<string | null>(null);
-  const [newOrder, setNewOrder] = useState<number>(0);
   const [showNewAccountModal, setShowNewAccountModal] = useState(false);
   const [newAccountType, setNewAccountType] = useState<'category' | 'indicator' | 'total'>('category');
   const [categoryType, setCategoryType] = useState<'revenue' | 'expense'>('revenue');
@@ -115,21 +118,25 @@ export const Dre = () => {
     saveToStorage('dre_accounts', accounts);
   }, [accounts]);
 
-  const calculateAccountValue = (accountId: string): number => {
+  const getAccountLevel = (accountId: string | null): number => {
+    if (!accountId) return 0;
+    
     const account = accounts.find(acc => acc.id === accountId);
     if (!account) return 0;
+    
+    return 1 + getAccountLevel(account.parentAccountId);
+  };
 
-    if (account.categoryIds && account.categoryIds.length > 0) {
-      return account.type === 'revenue' ? 1 : -1;
-    }
+  const getAvailableParentAccounts = () => {
+    const selectedCompany = companies.find(c => c.id === selectedCompanyId);
+    if (!selectedCompany) return [];
 
-    if (account.selectedAccounts && account.selectedAccounts.length > 0) {
-      return account.selectedAccounts.reduce((sum, childId) => {
-        return sum + calculateAccountValue(childId);
-      }, 0);
-    }
-
-    return 0;
+    return accounts.filter(acc => {
+      const level = getAccountLevel(acc.id);
+      return acc.companyId === selectedCompanyId && 
+             acc.type === 'total' && 
+             level < (selectedCompany.maxDreLevel - 1);
+    });
   };
 
   const toggleAccountExpansion = (accountId: string) => {
@@ -143,28 +150,6 @@ export const Dre = () => {
       acc.parentAccountId === accountId && 
       acc.companyId === selectedCompanyId
     );
-  };
-
-  const startEditingOrder = (accountId: string, currentOrder: number) => {
-    setEditingOrder(accountId);
-    setNewOrder(currentOrder);
-  };
-
-  const saveOrder = (accountId: string) => {
-    if (newOrder < 1) return;
-
-    setAccounts(accounts.map(acc => 
-      acc.id === accountId
-        ? { ...acc, displayOrder: newOrder }
-        : acc
-    ));
-    setEditingOrder(null);
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>, accountId: string) => {
-    if (e.key === 'Enter') {
-      saveOrder(accountId);
-    }
   };
 
   const copyAccounts = () => {
@@ -189,38 +174,44 @@ export const Dre = () => {
     
     if (!account) return;
 
-    const newAccounts = [...accounts];
-    if (direction === 'up' && accountIndex > 0) {
-      const temp = newAccounts[accountIndex - 1].displayOrder;
-      newAccounts[accountIndex - 1].displayOrder = account.displayOrder;
-      newAccounts[accountIndex].displayOrder = temp;
-    } else if (direction === 'down' && accountIndex < accounts.length - 1) {
-      const temp = newAccounts[accountIndex + 1].displayOrder;
-      newAccounts[accountIndex + 1].displayOrder = account.displayOrder;
-      newAccounts[accountIndex].displayOrder = temp;
+    const siblingAccounts = accounts.filter(acc => 
+      acc.parentAccountId === account.parentAccountId && 
+      acc.companyId === selectedCompanyId
+    ).sort((a, b) => a.displayOrder - b.displayOrder);
+
+    const currentIndex = siblingAccounts.findIndex(acc => acc.id === accountId);
+    
+    if (direction === 'up' && currentIndex > 0) {
+      const temp = siblingAccounts[currentIndex - 1].displayOrder;
+      siblingAccounts[currentIndex - 1].displayOrder = account.displayOrder;
+      siblingAccounts[currentIndex].displayOrder = temp;
+    } else if (direction === 'down' && currentIndex < siblingAccounts.length - 1) {
+      const temp = siblingAccounts[currentIndex + 1].displayOrder;
+      siblingAccounts[currentIndex + 1].displayOrder = account.displayOrder;
+      siblingAccounts[currentIndex].displayOrder = temp;
     }
 
-    setAccounts(newAccounts);
+    setAccounts([...accounts]);
   };
-
-  const filteredCategories = categories.filter(category => 
-    category.companyId === selectedCompanyId &&
-    category.type === categoryType &&
-    category.isActive &&
-    category.name.toLowerCase().includes(categorySearch.toLowerCase()) &&
-    !selectedCategories.some(sc => sc.id === category.id)
-  );
-
-  const filteredIndicators = indicators.filter(indicator =>
-    indicator.companyId === selectedCompanyId &&
-    indicator.isActive &&
-    indicator.name.toLowerCase().includes(indicatorSearch.toLowerCase())
-  );
 
   const handleAddAccount = () => {
     if (!selectedCompanyId || !newAccountName) return;
 
-    const maxOrder = Math.max(...accounts.map(acc => acc.displayOrder), 0);
+    const parentLevel = getAccountLevel(selectedParentAccount);
+    const selectedCompany = companies.find(c => c.id === selectedCompanyId);
+    
+    if (selectedCompany && parentLevel >= selectedCompany.maxDreLevel - 1) {
+      alert(`Não é possível criar uma conta neste nível. O limite máximo é ${selectedCompany.maxDreLevel} níveis.`);
+      return;
+    }
+
+    const siblingAccounts = accounts.filter(acc => 
+      acc.parentAccountId === selectedParentAccount && 
+      acc.companyId === selectedCompanyId
+    );
+    
+    const maxOrder = Math.max(...siblingAccounts.map(acc => acc.displayOrder), 0);
+
     const newAccount: DreAccount = {
       id: Math.random().toString(36).substr(2, 9),
       code: `A${(accounts.length + 1).toString().padStart(2, '0')}`,
@@ -230,7 +221,8 @@ export const Dre = () => {
       companyId: selectedCompanyId,
       parentAccountId: selectedParentAccount,
       isActive: true,
-      isExpanded: false
+      isExpanded: false,
+      level: parentLevel + 1
     };
 
     if (newAccountType === 'category' && selectedCategories.length > 0) {
@@ -298,10 +290,17 @@ export const Dre = () => {
     });
   };
 
+  const updateCompanyMaxLevel = (companyId: string, maxLevel: number) => {
+    setCompanies(companies.map(company =>
+      company.id === companyId
+        ? { ...company, maxDreLevel: maxLevel }
+        : company
+    ));
+  };
+
   const renderAccountRow = (account: DreAccount, level: number = 0) => {
     const childAccounts = getChildAccounts(account.id);
     const hasChildren = childAccounts.length > 0;
-    const accountValue = calculateAccountValue(account.id);
     
     return (
       <React.Fragment key={account.id}>
@@ -328,16 +327,6 @@ export const Dre = () => {
               {account.type === 'total' && <Equal size={16} className="text-blue-400" />}
               <span className="text-zinc-100">{account.name}</span>
             </div>
-          </td>
-          <td className="px-6 py-4 text-right">
-            <span className={`font-mono ${
-              accountValue > 0 ? 'text-green-400' : accountValue < 0 ? 'text-red-400' : 'text-zinc-400'
-            }`}>
-              {accountValue.toLocaleString('pt-BR', { 
-                style: 'currency', 
-                currency: 'BRL'
-              })}
-            </span>
           </td>
           <td className="px-6 py-4 text-right">
             <div className="flex items-center justify-end gap-2">
@@ -410,22 +399,41 @@ export const Dre = () => {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-2">
-              Empresa
-            </label>
-            <select
-              value={selectedCompanyId}
-              onChange={(e) => setSelectedCompanyId(e.target.value)}
-              className="bg-zinc-800 text-zinc-100 rounded-lg px-4 py-3 w-full md:w-96"
-            >
-              <option value="">Selecione uma empresa</option>
-              {companies.filter(c => c.isActive).map(company => (
-                <option key={company.id} value={company.id}>
-                  {company.tradingName} - {company.name}
-                </option>
-              ))}
-            </select>
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-zinc-400 mb-2">
+                Empresa
+              </label>
+              <select
+                value={selectedCompanyId}
+                onChange={(e) => setSelectedCompanyId(e.target.value)}
+                className="bg-zinc-800 text-zinc-100 rounded-lg px-4 py-3 w-full"
+              >
+                <option value="">Selecione uma empresa</option>
+                {companies.filter(c => c.isActive).map(company => (
+                  <option key={company.id} value={company.id}>
+                    {company.tradingName} - {company.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {selectedCompanyId && (
+              <div className="md:w-64">
+                <label className="block text-sm font-medium text-zinc-400 mb-2">
+                  Níveis Máximos do DRE
+                </label>
+                <select
+                  value={companies.find(c => c.id === selectedCompanyId)?.maxDreLevel || 3}
+                  onChange={(e) => updateCompanyMaxLevel(selectedCompanyId, Number(e.target.value))}
+                  className="bg-zinc-800 text-zinc-100 rounded-lg px-4 py-3 w-full"
+                >
+                  <option value={3}>3 Níveis</option>
+                  <option value={4}>4 Níveis</option>
+                  <option value={5}>5 Níveis</option>
+                </select>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -438,7 +446,6 @@ export const Dre = () => {
                 <tr className="border-b border-zinc-800">
                   <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Código</th>
                   <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Conta</th>
-                  <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-400">Valor</th>
                   <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-400">Ações</th>
                 </tr>
               </thead>
@@ -496,13 +503,11 @@ export const Dre = () => {
                   className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
                 >
                   <option value="">Nenhuma (Conta Principal)</option>
-                  {accounts
-                    .filter(acc => acc.companyId === selectedCompanyId && acc.type === 'total')
-                    .map(account => (
-                      <option key={account.id} value={account.id}>
-                        {account.code} - {account.name}
-                      </option>
-                    ))}
+                  {getAvailableParentAccounts().map(account => (
+                    <option key={account.id} value={account.id}>
+                      {account.code} - {account.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -589,15 +594,24 @@ export const Dre = () => {
                     
                     {categorySearch && (
                       <div className="mt-2 max-h-40 overflow-y-auto bg-zinc-800 rounded-lg">
-                        {filteredCategories.map(category => (
-                          <button
-                            key={category.id}
-                            onClick={() => handleToggleCategory(category)}
-                            className="w-full px-4 py-2 text-left hover:bg-zinc-700 text-zinc-300"
-                          >
-                            {category.code} - {category.name}
-                          </button>
-                        ))}
+                        {categories
+                          .filter(category => 
+                            category.companyId === selectedCompanyId &&
+                            category.type === categoryType &&
+                            category.isActive &&
+                            category.name.toLowerCase().includes(categorySearch.toLowerCase()) &&
+                            !selectedCategories.some(sc => sc.id === category.id)
+                          )
+                          .map(category => (
+                            <button
+                              key={category.id}
+                              onClick={() => handleToggleCategory(category)}
+                              className="w-full px-4 py-2 text-left hover:bg-zinc-700 text-zinc-300"
+                            >
+                              {category.code} - {category.name}
+                            </button>
+                          ))
+                        }
                       </div>
                     )}
                   </div>
@@ -642,18 +656,25 @@ export const Dre = () => {
                   
                   {indicatorSearch && (
                     <div className="mt-2 max-h-40 overflow-y-auto bg-zinc-800 rounded-lg">
-                      {filteredIndicators.map(indicator => (
-                        <button
-                          key={indicator.id}
-                          onClick={() => {
-                            setSelectedIndicator(indicator);
-                            setIndicatorSearch('');
-                          }}
-                          className="w-full px-4 py-2 text-left hover:bg-zinc-700 text-zinc-300"
-                        >
-                          {indicator.code} - {indicator.name}
-                        </button>
-                      ))}
+                      {indicators
+                        .filter(indicator =>
+                          indicator.companyId === selectedCompanyId &&
+                          indicator.isActive &&
+                          indicator.name.toLowerCase().includes(indicatorSearch.toLowerCase())
+                        )
+                        .map(indicator => (
+                          <button
+                            key={indicator.id}
+                            onClick={() => {
+                              setSelectedIndicator(indicator);
+                              setIndicatorSearch('');
+                            }}
+                            className="w-full px-4 py-2 text-left hover:bg-zinc-700 text-zinc-300"
+                          >
+                            {indicator.code} - {indicator.name}
+                          </button>
+                        ))
+                      }
                     </div>
                   )}
 
@@ -744,6 +765,7 @@ export const Dre = () => {
 
       {showCopyModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          
           <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold text-zinc-100 mb-4">
               Copiar DRE
