@@ -1,13 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, ChevronRight, Copy, PencilIcon, Save, Check, X } from 'lucide-react';
+import { Plus, Trash2, Copy, PencilIcon, Save, Check, X, FolderPlus, Power } from 'lucide-react';
 
 interface Category {
   id: string;
   code: string;
   name: string;
   type: 'revenue' | 'expense';
-  parentId: string | null;
-  children: Category[];
+  groupId: string | null;
+  companyId: string;
+  isEditing?: boolean;
+  isNew?: boolean;
+  isActive: boolean;
+}
+
+interface CategoryGroup {
+  id: string;
+  name: string;
+  type: 'revenue' | 'expense';
   companyId: string;
   isEditing?: boolean;
   isNew?: boolean;
@@ -19,7 +28,6 @@ interface Company {
   tradingName: string;
   cnpj: string;
   isActive: boolean;
-  categoryLevels?: number;
 }
 
 const loadFromStorage = (key: string, defaultValue: any) => {
@@ -39,24 +47,21 @@ export const Categories = () => {
         name: 'TechCorp Solutions Ltda',
         tradingName: 'TechCorp',
         cnpj: '12.345.678/0001-90',
-        isActive: true,
-        categoryLevels: 3
+        isActive: true
       },
       {
         id: 'COMP002',
         name: 'Inovação Digital S.A.',
         tradingName: 'InovaTech',
         cnpj: '23.456.789/0001-01',
-        isActive: true,
-        categoryLevels: 4
+        isActive: true
       },
       {
         id: 'COMP003',
         name: 'Global Software Enterprise',
         tradingName: 'GSE',
         cnpj: '34.567.890/0001-12',
-        isActive: true,
-        categoryLevels: 5
+        isActive: true
       }
     ])
   );
@@ -65,221 +70,213 @@ export const Categories = () => {
     loadFromStorage('categories', [])
   );
 
+  const [groups, setGroups] = useState<CategoryGroup[]>(() => 
+    loadFromStorage('category_groups', [])
+  );
+
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyFromCompanyId, setCopyFromCompanyId] = useState<string>('');
   const [copyToCompanyId, setCopyToCompanyId] = useState<string>('');
-  const [isEditingLevels, setIsEditingLevels] = useState(false);
 
   useEffect(() => {
     saveToStorage('categories', categories);
   }, [categories]);
 
   useEffect(() => {
+    saveToStorage('category_groups', groups);
+  }, [groups]);
+
+  useEffect(() => {
     saveToStorage('companies', companies);
   }, [companies]);
 
-  const selectedCompany = companies.find(c => c.id === selectedCompanyId);
-
-  const updateCompanyCategoryLevels = (levels: number) => {
-    setCompanies(companies.map(company => 
-      company.id === selectedCompanyId
-        ? { ...company, categoryLevels: levels }
-        : company
-    ));
-    setIsEditingLevels(false);
-  };
-
-  const generateCode = (type: 'revenue' | 'expense', parentCategory?: Category) => {
+  const generateCode = (type: 'revenue' | 'expense') => {
     const prefix = type === 'revenue' ? 'R' : 'D';
-    const parentCode = parentCategory ? parentCategory.code : '';
-    const siblingCategories = parentCategory 
-      ? parentCategory.children 
-      : categories.filter(c => c.type === type && !c.parentId && c.companyId === selectedCompanyId);
-    
-    const nextNumber = (siblingCategories.length + 1).toString().padStart(2, '0');
-    return parentCode ? `${parentCode}.${nextNumber}` : `${prefix}${nextNumber}`;
+    const existingCategories = categories.filter(c => 
+      c.type === type && c.companyId === selectedCompanyId
+    );
+    const nextNumber = (existingCategories.length + 1).toString().padStart(2, '0');
+    return `${prefix}${nextNumber}`;
   };
 
-  const addCategory = (type: 'revenue' | 'expense', parentId: string | null = null) => {
+  const addCategory = (type: 'revenue' | 'expense', groupId: string | null = null) => {
     if (!selectedCompanyId) return;
-
-    const parentCategory = parentId 
-      ? findCategory(categories, parentId)
-      : undefined;
 
     const newCategory: Category = {
       id: Math.random().toString(36).substr(2, 9),
-      code: generateCode(type, parentCategory),
+      code: generateCode(type),
       name: '',
       type,
-      parentId,
-      children: [],
+      groupId,
+      companyId: selectedCompanyId,
+      isEditing: true,
+      isNew: true,
+      isActive: true
+    };
+
+    setCategories([...categories, newCategory]);
+  };
+
+  const addGroup = (type: 'revenue' | 'expense') => {
+    if (!selectedCompanyId) return;
+
+    const newGroup: CategoryGroup = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: '',
+      type,
       companyId: selectedCompanyId,
       isEditing: true,
       isNew: true
     };
 
-    if (!parentId) {
-      setCategories([...categories, newCategory]);
-    } else {
-      const updateCategories = (cats: Category[]): Category[] => {
-        return cats.map(cat => {
-          if (cat.id === parentId) {
-            return { ...cat, children: [...cat.children, newCategory] };
-          }
-          if (cat.children.length > 0) {
-            return { ...cat, children: updateCategories(cat.children) };
-          }
-          return cat;
-        });
-      };
-
-      setCategories(updateCategories(categories));
-    }
+    setGroups([...groups, newGroup]);
   };
 
   const startEditing = (categoryId: string) => {
-    const updateCategoryEditing = (cats: Category[]): Category[] => {
-      return cats.map(cat => {
-        if (cat.id === categoryId) {
-          return { ...cat, isEditing: true };
-        }
-        if (cat.children.length > 0) {
-          return { ...cat, children: updateCategoryEditing(cat.children) };
-        }
-        return cat;
-      });
-    };
+    setCategories(categories.map(cat => 
+      cat.id === categoryId ? { ...cat, isEditing: true } : cat
+    ));
+  };
 
-    setCategories(updateCategoryEditing(categories));
+  const startEditingGroup = (groupId: string) => {
+    setGroups(groups.map(group => 
+      group.id === groupId ? { ...group, isEditing: true } : group
+    ));
   };
 
   const saveCategory = (categoryId: string, newName: string) => {
     if (!newName.trim()) return;
 
-    const updateCategoryName = (cats: Category[]): Category[] => {
-      return cats.map(cat => {
-        if (cat.id === categoryId) {
-          return { 
-            ...cat, 
-            name: newName.trim(), 
-            isEditing: false,
-            isNew: false 
-          };
-        }
-        if (cat.children.length > 0) {
-          return { ...cat, children: updateCategoryName(cat.children) };
-        }
-        return cat;
-      });
-    };
+    setCategories(categories.map(cat => 
+      cat.id === categoryId
+        ? { ...cat, name: newName.trim(), isEditing: false, isNew: false }
+        : cat
+    ));
+  };
 
-    setCategories(updateCategoryName(categories));
+  const saveGroup = (groupId: string, newName: string) => {
+    if (!newName.trim()) return;
+
+    setGroups(groups.map(group => 
+      group.id === groupId
+        ? { ...group, name: newName.trim(), isEditing: false, isNew: false }
+        : group
+    ));
+  };
+
+  const toggleCategoryStatus = (categoryId: string) => {
+    setCategories(categories.map(cat => 
+      cat.id === categoryId
+        ? { ...cat, isActive: !cat.isActive }
+        : cat
+    ));
   };
 
   const cancelEditing = (categoryId: string, isNew: boolean = false) => {
     if (isNew) {
       deleteCategory(categoryId);
     } else {
-      const updateCategoryEditing = (cats: Category[]): Category[] => {
-        return cats.map(cat => {
-          if (cat.id === categoryId) {
-            return { ...cat, isEditing: false };
-          }
-          if (cat.children.length > 0) {
-            return { ...cat, children: updateCategoryEditing(cat.children) };
-          }
-          return cat;
-        });
-      };
+      setCategories(categories.map(cat => 
+        cat.id === categoryId ? { ...cat, isEditing: false } : cat
+      ));
+    }
+  };
 
-      setCategories(updateCategoryEditing(categories));
+  const cancelEditingGroup = (groupId: string, isNew: boolean = false) => {
+    if (isNew) {
+      deleteGroup(groupId);
+    } else {
+      setGroups(groups.map(group => 
+        group.id === groupId ? { ...group, isEditing: false } : group
+      ));
     }
   };
 
   const copyCategories = () => {
     if (!copyFromCompanyId || !copyToCompanyId) return;
 
-    const deepCopyCategory = (category: Category): Category => {
-      return {
-        ...category,
-        id: Math.random().toString(36).substr(2, 9),
-        companyId: copyToCompanyId,
-        children: category.children.map(child => deepCopyCategory(child))
-      };
-    };
-
     const categoriesToCopy = categories.filter(cat => cat.companyId === copyFromCompanyId);
-    const copiedCategories = categoriesToCopy.map(cat => deepCopyCategory(cat));
+    const groupsToCopy = groups.filter(group => group.companyId === copyFromCompanyId);
 
+    const copiedGroups = groupsToCopy.map(group => ({
+      ...group,
+      id: Math.random().toString(36).substr(2, 9),
+      companyId: copyToCompanyId
+    }));
+
+    const groupIdMap = groupsToCopy.reduce((acc, group) => {
+      const newGroup = copiedGroups.find(g => g.companyId === copyToCompanyId && g.type === group.type);
+      acc[group.id] = newGroup ? newGroup.id : null;
+      return acc;
+    }, {} as Record<string, string | null>);
+
+    const copiedCategories = categoriesToCopy.map(cat => ({
+      ...cat,
+      id: Math.random().toString(36).substr(2, 9),
+      companyId: copyToCompanyId,
+      groupId: cat.groupId ? groupIdMap[cat.groupId] : null
+    }));
+
+    setGroups([...groups, ...copiedGroups]);
     setCategories([...categories, ...copiedCategories]);
     setShowCopyModal(false);
     setCopyFromCompanyId('');
     setCopyToCompanyId('');
   };
 
-  const findCategory = (cats: Category[], id: string): Category | undefined => {
-    for (const cat of cats) {
-      if (cat.id === id) return cat;
-      const found = findCategory(cat.children, id);
-      if (found) return found;
-    }
-    return undefined;
-  };
-
   const deleteCategory = (categoryId: string) => {
-    const removeCategory = (cats: Category[]): Category[] => {
-      return cats.filter(cat => {
-        if (cat.id === categoryId) return false;
-        if (cat.children.length > 0) {
-          cat.children = removeCategory(cat.children);
-        }
-        return true;
-      });
-    };
-
-    setCategories(removeCategory(categories));
+    setCategories(categories.filter(cat => cat.id !== categoryId));
   };
 
-  const renderCategoryItem = (category: Category, level: number = 0) => {
-    if (!selectedCompany || level >= selectedCompany.categoryLevels!) return null;
+  const deleteGroup = (groupId: string) => {
+    setGroups(groups.filter(group => group.id !== groupId));
+    setCategories(categories.map(cat => 
+      cat.groupId === groupId ? { ...cat, groupId: null } : cat
+    ));
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>, id: string, value: string, type: 'category' | 'group') => {
+    if (e.key === 'Enter') {
+      if (type === 'category') {
+        saveCategory(id, value);
+      } else {
+        saveGroup(id, value);
+      }
+    }
+  };
+
+  const renderCategoryGroup = (group: CategoryGroup) => {
+    const groupCategories = categories.filter(cat => 
+      cat.groupId === group.id && cat.companyId === selectedCompanyId
+    );
 
     return (
-      <div key={category.id} className="border-l-2 border-zinc-700 ml-4 pl-4">
-        <div className="flex items-center gap-4 py-2">
-          <span className="text-zinc-400 font-mono text-sm w-20">{category.code}</span>
-          {category.isEditing ? (
-            <div className="flex-1 flex items-center gap-2">
+      <div key={group.id} className="mb-6 bg-zinc-800/50 rounded-lg p-4">
+        <div className="flex items-center justify-between mb-4">
+          {group.isEditing ? (
+            <div className="flex items-center gap-2 flex-1">
               <input
                 type="text"
-                value={category.name}
+                value={group.name}
                 onChange={(e) => {
-                  const updateCategoryName = (cats: Category[]): Category[] => {
-                    return cats.map(cat => {
-                      if (cat.id === category.id) {
-                        return { ...cat, name: e.target.value };
-                      }
-                      if (cat.children.length > 0) {
-                        return { ...cat, children: updateCategoryName(cat.children) };
-                      }
-                      return cat;
-                    });
-                  };
-                  setCategories(updateCategoryName(categories));
+                  setGroups(groups.map(g => 
+                    g.id === group.id ? { ...g, name: e.target.value } : g
+                  ));
                 }}
+                onKeyPress={(e) => handleKeyPress(e, group.id, group.name, 'group')}
                 className="flex-1 bg-zinc-800 rounded px-2 py-1 text-zinc-100"
-                placeholder="Nome da categoria"
+                placeholder="Nome do grupo"
                 autoFocus
               />
               <button
-                onClick={() => saveCategory(category.id, category.name)}
+                onClick={() => saveGroup(group.id, group.name)}
                 className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-green-400"
               >
                 <Check size={16} />
               </button>
               <button
-                onClick={() => cancelEditing(category.id, category.isNew)}
+                onClick={() => cancelEditingGroup(group.id, group.isNew)}
                 className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-red-400"
               >
                 <X size={16} />
@@ -287,37 +284,172 @@ export const Categories = () => {
             </div>
           ) : (
             <>
-              <span className="text-zinc-100 flex-1">{category.name}</span>
+              <h3 className="text-lg font-medium text-zinc-200">{group.name}</h3>
               <div className="flex items-center gap-2">
-                {level < selectedCompany.categoryLevels! - 1 && (
-                  <button
-                    onClick={() => addCategory(category.type, category.id)}
-                    className="p-1 hover:bg-zinc-700 rounded-lg transition-colors"
-                  >
-                    <Plus size={16} className="text-zinc-400" />
-                  </button>
-                )}
                 <button
-                  onClick={() => startEditing(category.id)}
-                  className="p-1 hover:bg-zinc-700 rounded-lg transition-colors"
+                  onClick={() => startEditingGroup(group.id)}
+                  className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
                 >
-                  <PencilIcon size={16} className="text-zinc-400" />
+                  <PencilIcon size={16} />
                 </button>
                 <button
-                  onClick={() => deleteCategory(category.id)}
-                  className="p-1 hover:bg-zinc-700 rounded-lg transition-colors"
+                  onClick={() => deleteGroup(group.id)}
+                  className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
                 >
-                  <Trash2 size={16} className="text-zinc-400" />
+                  <Trash2 size={16} />
                 </button>
               </div>
             </>
           )}
         </div>
-        {category.children.length > 0 && (
-          <div className="ml-4">
-            {category.children.map(child => renderCategoryItem(child, level + 1))}
-          </div>
-        )}
+
+        <div className="space-y-2">
+          {groupCategories.map(category => (
+            <div key={category.id} className={`flex items-center gap-4 py-2 px-4 bg-zinc-800/50 rounded-lg ${!category.isActive && 'opacity-50'}`}>
+              <span className="text-zinc-400 font-mono text-sm w-20">{category.code}</span>
+              {category.isEditing ? (
+                <div className="flex-1 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={category.name}
+                    onChange={(e) => {
+                      setCategories(categories.map(cat => 
+                        cat.id === category.id ? { ...cat, name: e.target.value } : cat
+                      ));
+                    }}
+                    onKeyPress={(e) => handleKeyPress(e, category.id, category.name, 'category')}
+                    className="flex-1 bg-zinc-800 rounded px-2 py-1 text-zinc-100"
+                    placeholder="Nome da categoria"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => saveCategory(category.id, category.name)}
+                    className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-green-400"
+                  >
+                    <Check size={16} />
+                  </button>
+                  <button
+                    onClick={() => cancelEditing(category.id, category.isNew)}
+                    className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-red-400"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <span className="text-zinc-100 flex-1">{category.name}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => toggleCategoryStatus(category.id)}
+                      className={`p-1 hover:bg-zinc-700 rounded-lg transition-colors ${
+                        category.isActive ? 'text-green-400' : 'text-red-400'
+                      }`}
+                    >
+                      <Power size={16} />
+                    </button>
+                    <button
+                      onClick={() => startEditing(category.id)}
+                      className="p-1 hover:bg-zinc-700 rounded-lg transition-colors"
+                    >
+                      <PencilIcon size={16} className="text-zinc-400" />
+                    </button>
+                    <button
+                      onClick={() => deleteCategory(category.id)}
+                      className="p-1 hover:bg-zinc-700 rounded-lg transition-colors"
+                    >
+                      <Trash2 size={16} className="text-zinc-400" />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+          <button
+            onClick={() => addCategory(group.type, group.id)}
+            className="w-full mt-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-400 flex items-center justify-center gap-2"
+          >
+            <Plus size={16} />
+            Nova Categoria
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderUngroupedCategories = (type: 'revenue' | 'expense') => {
+    const ungroupedCategories = categories.filter(cat => 
+      cat.type === type && 
+      cat.groupId === null && 
+      cat.companyId === selectedCompanyId
+    );
+
+    if (ungroupedCategories.length === 0) return null;
+
+    return (
+      <div className="mb-6 bg-zinc-800/50 rounded-lg p-4">
+        <h3 className="text-lg font-medium text-zinc-200 mb-4">Sem Grupo</h3>
+        <div className="space-y-2">
+          {ungroupedCategories.map(category => (
+            <div key={category.id} className={`flex items-center gap-4 py-2 px-4 bg-zinc-800/50 rounded-lg ${!category.isActive && 'opacity-50'}`}>
+              <span className="text-zinc-400 font-mono text-sm w-20">{category.code}</span>
+              {category.isEditing ? (
+                <div className="flex-1 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={category.name}
+                    onChange={(e) => {
+                      setCategories(categories.map(cat => 
+                        cat.id === category.id ? { ...cat, name: e.target.value } : cat
+                      ));
+                    }}
+                    onKeyPress={(e) => handleKeyPress(e, category.id, category.name, 'category')}
+                    className="flex-1 bg-zinc-800 rounded px-2 py-1 text-zinc-100"
+                    placeholder="Nome da categoria"
+                    autoFocus
+                  />
+                  <button
+                    onClick={() => saveCategory(category.id, category.name)}
+                    className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-green-400"
+                  >
+                    <Check size={16} />
+                  </button>
+                  <button
+                    onClick={() => cancelEditing(category.id, category.isNew)}
+                    className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-red-400"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <span className="text-zinc-100 flex-1">{category.name}</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => toggleCategoryStatus(category.id)}
+                      className={`p-1 hover:bg-zinc-700 rounded-lg transition-colors ${
+                        category.isActive ? 'text-green-400' : 'text-red-400'
+                      }`}
+                    >
+                      <Power size={16} />
+                    </button>
+                    <button
+                      onClick={() => startEditing(category.id)}
+                      className="p-1 hover:bg-zinc-700 rounded-lg transition-colors"
+                    >
+                      <PencilIcon size={16} className="text-zinc-400" />
+                    </button>
+                    <button
+                      onClick={() => deleteCategory(category.id)}
+                      className="p-1 hover:bg-zinc-700 rounded-lg transition-colors"
+                    >
+                      <Trash2 size={16} className="text-zinc-400" />
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
     );
   };
@@ -342,74 +474,22 @@ export const Categories = () => {
             </button>
           </div>
 
-          <div className="flex flex-col gap-6">
-            {/* Seleção de Empresa */}
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-2">
-                Empresa
-              </label>
-              <select
-                value={selectedCompanyId}
-                onChange={(e) => setSelectedCompanyId(e.target.value)}
-                className="bg-zinc-800 text-zinc-100 rounded-lg px-4 py-3 w-full md:w-96"
-              >
-                <option value="">Selecione uma empresa</option>
-                {companies.filter(c => c.isActive).map(company => (
-                  <option key={company.id} value={company.id}>
-                    {company.tradingName} - {company.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Níveis de Categoria */}
-            {selectedCompany && (
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">
-                  Níveis de Categoria
-                </label>
-                <div className="flex items-center gap-4">
-                  {isEditingLevels ? (
-                    <>
-                      <div className="flex gap-2">
-                        {[3, 4, 5].map(level => (
-                          <button
-                            key={level}
-                            onClick={() => updateCompanyCategoryLevels(level)}
-                            className={`px-4 py-2 rounded-lg ${
-                              selectedCompany.categoryLevels === level
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                            }`}
-                          >
-                            {level}
-                          </button>
-                        ))}
-                      </div>
-                      <button
-                        onClick={() => setIsEditingLevels(false)}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white flex items-center gap-2"
-                      >
-                        <Save size={16} />
-                        Salvar
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-zinc-100 bg-zinc-800 px-4 py-2 rounded-lg">
-                        {selectedCompany.categoryLevels} níveis
-                      </span>
-                      <button
-                        onClick={() => setIsEditingLevels(true)}
-                        className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
-                      >
-                        <PencilIcon size={16} />
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
+          <div>
+            <label className="block text-sm font-medium text-zinc-400 mb-2">
+              Empresa
+            </label>
+            <select
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="bg-zinc-800 text-zinc-100 rounded-lg px-4 py-3 w-full md:w-96"
+            >
+              <option value="">Selecione uma empresa</option>
+              {companies.filter(c => c.isActive).map(company => (
+                <option key={company.id} value={company.id}>
+                  {company.tradingName} - {company.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -421,18 +501,28 @@ export const Categories = () => {
           <div className="bg-zinc-900 rounded-xl p-6">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-semibold text-zinc-100">Receitas</h2>
-              <button
-                onClick={() => addCategory('revenue')}
-                className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white flex items-center gap-2"
-              >
-                <Plus size={16} />
-                Nova Receita
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => addGroup('revenue')}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 flex items-center gap-2"
+                >
+                  <FolderPlus size={16} />
+                  Novo Grupo
+                </button>
+                <button
+                  onClick={() => addCategory('revenue')}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white flex items-center gap-2"
+                >
+                  <Plus size={16} />
+                  Nova Receita
+                </button>
+              </div>
             </div>
-            <div className="space-y-2">
-              {categories
-                .filter(cat => cat.type === 'revenue' && cat.companyId === selectedCompanyId)
-                .map(category => renderCategoryItem(category))}
+            <div className="space-y-4">
+              {groups
+                .filter(group => group.type === 'revenue' && group.companyId === selectedCompanyId)
+                .map(renderCategoryGroup)}
+              {renderUngroupedCategories('revenue')}
             </div>
           </div>
 
@@ -440,18 +530,28 @@ export const Categories = () => {
           <div className="bg-zinc-900 rounded-xl p-6">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-semibold text-zinc-100">Despesas</h2>
-              <button
-                onClick={() => addCategory('expense')}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white flex items-center gap-2"
-              >
-                <Plus size={16} />
-                Nova Despesa
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => addGroup('expense')}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 flex items-center gap-2"
+                >
+                  <FolderPlus size={16} />
+                  Novo Grupo
+                </button>
+                <button
+                  onClick={() => addCategory('expense')}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white flex items-center gap-2"
+                >
+                  <Plus size={16} />
+                  Nova Despesa
+                </button>
+              </div>
             </div>
-            <div className="space-y-2">
-              {categories
-                .filter(cat => cat.type === 'expense' && cat.companyId === selectedCompanyId)
-                .map(category => renderCategoryItem(category))}
+            <div className="space-y-4">
+              {groups
+                .filter(group => group.type === 'expense' && group.companyId === selectedCompanyId)
+                .map(renderCategoryGroup)}
+              {renderUngroupedCategories('expense')}
             </div>
           </div>
         </div>
