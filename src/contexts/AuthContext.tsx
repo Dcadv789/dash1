@@ -1,6 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import React, { createContext, useContext, useState } from 'react';
+
+interface User {
+  id: string;
+  email: string;
+  role: string;
+}
 
 interface AuthContextType {
   user: User | null;
@@ -12,36 +16,42 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(() => {
+    const savedUser = localStorage.getItem('user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    // Verifica a sessão atual
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+  const signIn = async (email: string, _password: string) => {
+    setLoading(true);
+    try {
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const mockUser = {
+        id: '1',
+        email: email,
+        role: 'admin'
+      };
+      
+      setUser(mockUser);
+      localStorage.setItem('user', JSON.stringify(mockUser));
+    } finally {
       setLoading(false);
-    });
-
-    // Escuta mudanças na autenticação
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-
-    if (error) throw error;
+    }
   };
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    setLoading(true);
+    try {
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      setUser(null);
+      localStorage.removeItem('user');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

@@ -20,7 +20,7 @@ export const Login = () => {
       await signIn(email, password);
       navigate('/companies');
     } catch (err) {
-      setError('Falha ao fazer login. Verifique suas credenciais.');
+      setError('Ocorreu um erro ao fazer login. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -72,7 +72,7 @@ export const Login = () => {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {loading ? 'Entrando...' : 'Entrar'}
             </button>
@@ -81,4 +81,4 @@ export const Login = () => {
       </div>
     </div>
   );
-}
+};
