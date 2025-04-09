@@ -2,12 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Bell, Settings, Users, Building, ChevronRight } from 'lucide-react';
 import { UserDropdown } from './UserDropdown';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 export const Topbar = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isFinanceOpen, setIsFinanceOpen] = useState(false);
   const settingsRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

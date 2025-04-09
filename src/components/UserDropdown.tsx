@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { User, LogOut } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 export const UserDropdown = () => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -18,6 +20,15 @@ export const UserDropdown = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      navigate('/login');
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error);
+    }
+  };
+
   return (
     <div className="relative" ref={dropdownRef}>
       <button
@@ -28,8 +39,8 @@ export const UserDropdown = () => {
           <User size={20} className="text-zinc-400" />
         </div>
         <div className="hidden md:block text-left">
-          <p className="text-sm font-medium text-zinc-100">João Silva</p>
-          <p className="text-xs text-zinc-500">Administrador</p>
+          <p className="text-sm font-medium text-zinc-100">{user?.email}</p>
+          <p className="text-xs text-zinc-500">Usuário</p>
         </div>
       </button>
 
@@ -46,10 +57,7 @@ export const UserDropdown = () => {
             Ver Perfil
           </button>
           <button
-            onClick={() => {
-              // Handle logout
-              setIsOpen(false);
-            }}
+            onClick={handleSignOut}
             className="w-full px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 flex items-center gap-2"
           >
             <LogOut size={16} />
