@@ -28,9 +28,12 @@ export const Profile = () => {
 
   const fetchProfileData = async () => {
     try {
-      if (!user) return;
+      if (!user) {
+        setProfileData(null);
+        return;
+      }
 
-      const { data: userData, error: userError } = await supabase
+      const { data: userDataArray, error: userError } = await supabase
         .from('system_users')
         .select(`
           id,
@@ -45,18 +48,29 @@ export const Profile = () => {
             trading_name
           )
         `)
-        .eq('auth_user_id', user.id)
-        .single();
+        .eq('auth_user_id', user.id);
 
       if (userError) throw userError;
 
+      // Check if we have any data
+      if (!userDataArray || userDataArray.length === 0) {
+        setProfileData(null);
+        setError('Perfil não encontrado');
+        return;
+      }
+
+      // Get the first user profile
+      const userData = userDataArray[0];
+
       setProfileData({
         ...userData,
-        company_name: userData.companies?.trading_name
+        company_name: userData.companies?.trading_name || 'Empresa não definida'
       });
-    } catch (err) {
-      setError('Erro ao carregar dados do perfil');
+      setError(null);
+    } catch (err: any) {
+      setError(err.message || 'Erro ao carregar dados do perfil');
       console.error('Erro:', err);
+      setProfileData(null);
     } finally {
       setLoading(false);
     }
@@ -140,7 +154,9 @@ export const Profile = () => {
     return (
       <div className="max-w-4xl mx-auto py-8">
         <div className="bg-zinc-900 rounded-xl p-6">
-          <p className="text-zinc-400 text-center">Erro ao carregar perfil</p>
+          <p className="text-zinc-400 text-center">
+            {error || 'Erro ao carregar perfil'}
+          </p>
         </div>
       </div>
     );

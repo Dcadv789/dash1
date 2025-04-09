@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Building2, Users, Calendar, FileText, Mail, Phone, Clock } from 'lucide-react';
+import { X, Building2, Users, Calendar, FileText, Mail, Phone, Clock, Hash } from 'lucide-react';
 import { Company } from '../types/company';
 
 interface CompanyViewModalProps {
@@ -52,6 +52,14 @@ export const CompanyViewModal = ({ isOpen, onClose, company }: CompanyViewModalP
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
               <div className="flex items-center gap-2">
+                <Hash size={20} className="text-zinc-500" />
+                <div>
+                  <p className="text-sm text-zinc-400">Código</p>
+                  <p className="text-zinc-200 font-mono">{company.id}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
                 <FileText size={20} className="text-zinc-500" />
                 <div>
                   <p className="text-sm text-zinc-400">CNPJ</p>
@@ -94,14 +102,6 @@ export const CompanyViewModal = ({ isOpen, onClose, company }: CompanyViewModalP
                   <p className="text-zinc-200">
                     {monthsAsCostumer} {monthsAsCostumer === 1 ? 'mês' : 'meses'}
                   </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <FileText size={20} className="text-zinc-500" />
-                <div>
-                  <p className="text-sm text-zinc-400">Código da Empresa</p>
-                  <p className="text-zinc-200 font-mono">{company.company_code}</p>
                 </div>
               </div>
             </div>

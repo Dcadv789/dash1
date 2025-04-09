@@ -4,12 +4,20 @@ import { supabase } from '../lib/supabase';
 import type { Database } from '../types/supabase';
 import { CompanyModal } from '../components/CompanyModal';
 import { CompanyViewModal } from '../components/CompanyViewModal';
+import { useAuth } from '../contexts/AuthContext';
 
 type Company = Database['public']['Tables']['companies']['Row'];
 type CompanyPartner = Database['public']['Tables']['company_partners']['Row'];
 
 interface CompanyWithPartners extends Company {
   partners?: CompanyPartner[];
+}
+
+interface SystemUser {
+  id: string;
+  role: string;
+  company_id: string | null;
+  has_all_companies_access: boolean;
 }
 
 export const Companies = () => {
@@ -19,19 +27,52 @@ export const Companies = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingCompany, setEditingCompany] = useState<CompanyWithPartners | null>(null);
   const [viewingCompany, setViewingCompany] = useState<CompanyWithPartners | null>(null);
+  const [currentUser, setCurrentUser] = useState<SystemUser | null>(null);
+  const { user } = useAuth();
 
   useEffect(() => {
-    fetchCompanies();
-  }, []);
+    if (user) {
+      fetchUserData();
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchCompanies();
+    }
+  }, [currentUser]);
+
+  const fetchUserData = async () => {
+    try {
+      const { data: userData, error: userError } = await supabase
+        .from('system_users')
+        .select('id, role, company_id, has_all_companies_access')
+        .eq('auth_user_id', user?.id)
+        .single();
+
+      if (userError) throw userError;
+      setCurrentUser(userData);
+    } catch (err) {
+      console.error('Error fetching user data:', err);
+      setError('Erro ao carregar dados do usuário');
+    }
+  };
 
   const fetchCompanies = async () => {
     try {
       setLoading(true);
       
-      const { data: companiesData, error: companiesError } = await supabase
+      let query = supabase
         .from('companies')
         .select('*')
         .order('created_at', { ascending: false });
+
+      // If user doesn't have access to all companies, filter by their company_id
+      if (currentUser && !currentUser.has_all_companies_access) {
+        query = query.eq('id', currentUser.company_id);
+      }
+
+      const { data: companiesData, error: companiesError } = await query;
 
       if (companiesError) throw companiesError;
 
@@ -157,12 +198,26 @@ export const Companies = () => {
     return Math.max(0, diffInMonths);
   };
 
+  if (!currentUser) {
+    return (
+      <div className="max-w-7xl mx-auto py-8 px-4">
+        <div className="bg-zinc-900 rounded-xl p-8 text-center">
+          <p className="text-zinc-400">Carregando dados do usuário...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto py-8 px-4">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold text-zinc-100">Gerenciamento de Empresas</h1>
-          <p className="text-zinc-400 mt-1">Cadastre e gerencie as empresas do sistema</p>
+          <p className="text-zinc-400 mt-1">
+            {currentUser.has_all_companies_access 
+              ? 'Visualize e gerencie todas as empresas do sistema'
+              : 'Gerencie os dados da sua empresa'}
+          </p>
         </div>
         <button 
           onClick={() => setShowModal(true)}
