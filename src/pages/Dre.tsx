@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Copy, PencilIcon, Save, Check, X, Plus, Minus, Equal, ArrowUp, ArrowDown, FolderPlus } from 'lucide-react';
+import { Copy, PencilIcon, Save, Check, X, Plus, Minus, Equal, ArrowUp, ArrowDown, FolderPlus, Power } from 'lucide-react';
 
 interface DreAccount {
   id: string;
@@ -9,12 +9,10 @@ interface DreAccount {
   displayOrder: number;
   companyId: string;
   isEditing?: boolean;
-  categoryId?: string;
+  categoryIds?: string[];
   indicatorId?: string;
-  selectedAccounts?: {
-    id: string;
-    operation: 'add' | 'subtract';
-  }[];
+  selectedAccounts?: string[];
+  isActive: boolean;
 }
 
 interface Category {
@@ -61,15 +59,6 @@ const saveToStorage = (key: string, value: any) => {
   localStorage.setItem(key, JSON.stringify(value));
 };
 
-const DEFAULT_TOTALS = [
-  { code: 'T01', name: 'Receita Bruta', type: 'total', afterCode: 'R' },
-  { code: 'T02', name: 'Receita Líquida', type: 'total', afterCode: 'R' },
-  { code: 'T03', name: 'Lucro Bruto', type: 'total', afterCode: 'D' },
-  { code: 'T04', name: 'Resultado Operacional', type: 'total', afterCode: 'D' },
-  { code: 'T05', name: 'Resultado Antes do IR', type: 'total', afterCode: 'D' },
-  { code: 'T06', name: 'Resultado Líquido', type: 'total', afterCode: 'D' }
-];
-
 export const Dre = () => {
   const [companies, setCompanies] = useState<Company[]>(() => 
     loadFromStorage('companies', [
@@ -109,10 +98,6 @@ export const Dre = () => {
     loadFromStorage('indicators', [])
   );
 
-  const [groups] = useState<CategoryGroup[]>(() => 
-    loadFromStorage('category_groups', [])
-  );
-
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyFromCompanyId, setCopyFromCompanyId] = useState<string>('');
@@ -126,11 +111,9 @@ export const Dre = () => {
   const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
   const [indicatorSearch, setIndicatorSearch] = useState('');
   const [selectedIndicator, setSelectedIndicator] = useState<Indicator | null>(null);
-  const [selectedDreAccounts, setSelectedDreAccounts] = useState<{
-    id: string;
-    operation: 'add' | 'subtract';
-  }[]>([]);
+  const [selectedDreAccounts, setSelectedDreAccounts] = useState<string[]>([]);
   const [newAccountName, setNewAccountName] = useState('');
+  const [editingAccount, setEditingAccount] = useState<DreAccount | null>(null);
 
   useEffect(() => {
     saveToStorage('dre_accounts', accounts);
@@ -198,7 +181,8 @@ export const Dre = () => {
     category.companyId === selectedCompanyId &&
     category.type === categoryType &&
     category.isActive &&
-    category.name.toLowerCase().includes(categorySearch.toLowerCase())
+    category.name.toLowerCase().includes(categorySearch.toLowerCase()) &&
+    !selectedCategories.some(sc => sc.id === category.id)
   );
 
   const filteredIndicators = indicators.filter(indicator =>
@@ -218,10 +202,11 @@ export const Dre = () => {
       type: newAccountType === 'category' ? categoryType : 'total',
       displayOrder: maxOrder + 1,
       companyId: selectedCompanyId,
+      isActive: true
     };
 
     if (newAccountType === 'category' && selectedCategories.length > 0) {
-      newAccount.categoryId = selectedCategories[0].id;
+      newAccount.categoryIds = selectedCategories.map(c => c.id);
     } else if (newAccountType === 'indicator' && selectedIndicator) {
       newAccount.indicatorId = selectedIndicator.id;
     } else if (newAccountType === 'total') {
@@ -231,6 +216,21 @@ export const Dre = () => {
     setAccounts([...accounts, newAccount]);
     resetNewAccountForm();
     setShowNewAccountModal(false);
+  };
+
+  const handleEditAccount = () => {
+    if (!editingAccount) return;
+
+    setAccounts(accounts.map(acc => 
+      acc.id === editingAccount.id ? editingAccount : acc
+    ));
+    setEditingAccount(null);
+  };
+
+  const toggleAccountStatus = (accountId: string) => {
+    setAccounts(accounts.map(acc => 
+      acc.id === accountId ? { ...acc, isActive: !acc.isActive } : acc
+    ));
   };
 
   const resetNewAccountForm = () => {
@@ -258,6 +258,43 @@ export const Dre = () => {
   const sortedAccounts = [...accounts]
     .filter(acc => acc.companyId === selectedCompanyId)
     .sort((a, b) => a.displayOrder - b.displayOrder);
+
+  const getAccountName = (account: DreAccount): string => {
+    if (account.categoryIds && account.categoryIds.length > 0) {
+      if (account.categoryIds.length === 1) {
+        const category = categories.find(c => c.id === account.categoryIds![0]);
+        return category ? `${category.code} - ${category.name}` : account.name;
+      } else {
+        return `${account.name} (${account.categoryIds.length} categorias)`;
+      }
+    }
+    return account.name;
+  };
+
+  const handleToggleCategory = (category: Category) => {
+    setSelectedCategories(prev => {
+      const isSelected = prev.some(c => c.id === category.id);
+      if (isSelected) {
+        return prev.filter(c => c.id !== category.id);
+      } else {
+        return [...prev, category];
+      }
+    });
+  };
+
+  const handleToggleAccount = (accountId: string) => {
+    const account = accounts.find(a => a.id === accountId);
+    if (!account) return;
+
+    setSelectedDreAccounts(prev => {
+      const isSelected = prev.includes(accountId);
+      if (isSelected) {
+        return prev.filter(id => id !== accountId);
+      } else {
+        return [...prev, accountId];
+      }
+    });
+  };
 
   return (
     <div className="max-w-6xl mx-auto py-8">
@@ -325,7 +362,7 @@ export const Dre = () => {
               </thead>
               <tbody>
                 {sortedAccounts.map((account) => (
-                  <tr key={account.id} className="border-b border-zinc-800 hover:bg-zinc-800/50">
+                  <tr key={account.id} className={`border-b border-zinc-800 hover:bg-zinc-800/50 ${!account.isActive && 'opacity-50'}`}>
                     <td className="px-6 py-4">
                       {editingOrder === account.id ? (
                         <div className="flex items-center gap-2">
@@ -367,9 +404,23 @@ export const Dre = () => {
                         {renderAccountTypeIcon(account.type)}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-zinc-100">{account.name}</td>
+                    <td className="px-6 py-4 text-zinc-100">{getAccountName(account)}</td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => toggleAccountStatus(account.id)}
+                          className={`p-1 hover:bg-zinc-700 rounded-lg transition-colors ${
+                            account.isActive ? 'text-green-400' : 'text-red-400'
+                          }`}
+                        >
+                          <Power size={16} />
+                        </button>
+                        <button
+                          onClick={() => setEditingAccount(account)}
+                          className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
+                        >
+                          <PencilIcon size={16} />
+                        </button>
                         <button
                           onClick={() => moveAccount(account.id, 'up')}
                           className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
@@ -475,7 +526,10 @@ export const Dre = () => {
                         <input
                           type="radio"
                           checked={categoryType === 'revenue'}
-                          onChange={() => setCategoryType('revenue')}
+                          onChange={() => {
+                            setCategoryType('revenue');
+                            setSelectedCategories([]);
+                          }}
                           className="text-blue-600"
                         />
                         <span className="text-zinc-300">Receita</span>
@@ -484,7 +538,10 @@ export const Dre = () => {
                         <input
                           type="radio"
                           checked={categoryType === 'expense'}
-                          onChange={() => setCategoryType('expense')}
+                          onChange={() => {
+                            setCategoryType('expense');
+                            setSelectedCategories([]);
+                          }}
                           className="text-blue-600"
                         />
                         <span className="text-zinc-300">Despesa</span>
@@ -509,10 +566,7 @@ export const Dre = () => {
                         {filteredCategories.map(category => (
                           <button
                             key={category.id}
-                            onClick={() => {
-                              setSelectedCategories([category]);
-                              setCategorySearch('');
-                            }}
+                            onClick={() => handleToggleCategory(category)}
                             className="w-full px-4 py-2 text-left hover:bg-zinc-700 text-zinc-300"
                           >
                             {category.code} - {category.name}
@@ -525,16 +579,16 @@ export const Dre = () => {
                   {selectedCategories.length > 0 && (
                     <div className="mt-4">
                       <label className="block text-sm font-medium text-zinc-400 mb-2">
-                        Categoria Selecionada
+                        Categorias Selecionadas
                       </label>
-                      <div className="bg-zinc-800 p-2 rounded-lg">
+                      <div className="space-y-2">
                         {selectedCategories.map(category => (
-                          <div key={category.id} className="flex items-center justify-between">
+                          <div key={category.id} className="flex items-center justify-between bg-zinc-800 p-2 rounded-lg">
                             <span className="text-zinc-300">
                               {category.code} - {category.name}
                             </span>
                             <button
-                              onClick={() => setSelectedCategories([])}
+                              onClick={() => handleToggleCategory(category)}
                               className="text-zinc-400 hover:text-red-400"
                             >
                               <X size={16} />
@@ -607,49 +661,25 @@ export const Dre = () => {
                   </label>
                   <div className="space-y-2 max-h-60 overflow-y-auto">
                     {accounts
-                      .filter(acc => acc.companyId === selectedCompanyId)
+                      .filter(acc => acc.companyId === selectedCompanyId && acc.type !== 'total')
                       .map(account => {
-                        const isSelected = selectedDreAccounts.some(sa => sa.id === account.id);
-                        const operation = isSelected 
-                          ? selectedDreAccounts.find(sa => sa.id === account.id)?.operation
-                          : null;
-
+                        const isSelected = selectedDreAccounts.includes(account.id);
                         return (
                           <div key={account.id} className="flex items-center gap-2 p-2 bg-zinc-800 rounded-lg">
                             <input
                               type="checkbox"
                               checked={isSelected}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedDreAccounts([...selectedDreAccounts, {
-                                    id: account.id,
-                                    operation: account.type === 'revenue' ? 'add' : 'subtract'
-                                  }]);
-                                } else {
-                                  setSelectedDreAccounts(selectedDreAccounts.filter(sa => sa.id !== account.id));
-                                }
-                              }}
+                              onChange={() => handleToggleAccount(account.id)}
                               className="text-blue-600"
                             />
-                            <span className="text-zinc-300 flex-1">
-                              {account.code} - {account.name}
-                            </span>
-                            {isSelected && (
-                              <select
-                                value={operation}
-                                onChange={(e) => {
-                                  setSelectedDreAccounts(selectedDreAccounts.map(sa =>
-                                    sa.id === account.id
-                                      ? { ...sa, operation: e.target.value as 'add' | 'subtract' }
-                                      : sa
-                                  ));
-                                }}
-                                className="bg-zinc-700 text-zinc-300 rounded px-2 py-1"
-                              >
-                                <option value="add">Somar</option>
-                                <option value="subtract">Subtrair</option>
-                              </select>
-                            )}
+                            <div className="flex items-center gap-2 flex-1">
+                              <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center">
+                                {renderAccountTypeIcon(account.type)}
+                              </div>
+                              <span className="text-zinc-300">
+                                {account.code} - {getAccountName(account)}
+                              </span>
+                            </div>
                           </div>
                         );
                       })}
@@ -679,6 +709,68 @@ export const Dre = () => {
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Adicionar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Edição */}
+      {editingAccount && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-semibold text-zinc-100">
+                Editar Conta
+              </h3>
+              <button
+                onClick={() => setEditingAccount(null)}
+                className="text-zinc-400 hover:text-zinc-100"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">
+                  Nome da Conta
+                </label>
+                <input
+                  type="text"
+                  value={editingAccount.name}
+                  onChange={(e) => setEditingAccount({ ...editingAccount, name: e.target.value })}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                  placeholder="Nome da conta"
+                />
+              </div>
+
+              <div>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={editingAccount.isActive}
+                    onChange={(e) => setEditingAccount({ ...editingAccount, isActive: e.target.checked })}
+                    className="text-blue-600"
+                  />
+                  <span className="text-zinc-400">Conta Ativa</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => setEditingAccount(null)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleEditAccount}
+                disabled={!editingAccount.name.trim()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Salvar
               </button>
             </div>
           </div>
