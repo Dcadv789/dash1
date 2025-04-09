@@ -98,7 +98,7 @@ export const Topbar = () => {
                       }}
                       className="w-full px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 text-left"
                     >
-                      DRE
+                      DRE Config
                     </button>
                   </div>
                 )}
@@ -110,4 +110,4 @@ export const Topbar = () => {
       </div>
     </header>
   );
-};
+}

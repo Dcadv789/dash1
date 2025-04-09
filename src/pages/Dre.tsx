@@ -13,7 +13,7 @@ const loadFromStorage = (key: string, defaultValue: any) => {
   return stored ? JSON.parse(stored) : defaultValue;
 };
 
-export const Dre = () => {
+export const DreConfig = () => {
   const [companies] = useState<Company[]>(() => 
     loadFromStorage('companies', [
       {
@@ -165,7 +165,7 @@ export const Dre = () => {
         <div className="flex flex-col gap-8">
           <div className="flex justify-between items-start">
             <div>
-              <h1 className="text-2xl font-bold text-zinc-100">DRE</h1>
+              <h1 className="text-2xl font-bold text-zinc-100">DRE Config</h1>
               <p className="text-zinc-400 mt-2">Demonstrativo de Resultados</p>
             </div>
 
