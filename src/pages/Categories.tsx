@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Copy, PencilIcon, Save, Check, X, FolderPlus, Power, Trash2 } from 'lucide-react';
+import { Copy, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { CategoryGroup, Category, CompanyCategory } from '../types/financial';
 import { useAuth } from '../contexts/AuthContext';
+import { CategorySection } from '../components/categories/CategorySection';
+import { CopyModal } from '../components/categories/CopyModal';
 
 interface Company {
   id: string;
@@ -17,7 +19,7 @@ export const Categories = () => {
   const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [companyCategories, setCompanyCategories] = useState<CompanyCategory[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyFromCompanyId, setCopyFromCompanyId] = useState<string>('');
@@ -26,15 +28,10 @@ export const Categories = () => {
 
   useEffect(() => {
     fetchCompanies();
+    fetchCategoryGroups();
+    fetchCategories();
+    fetchAllCompanyCategories();
   }, []);
-
-  useEffect(() => {
-    if (selectedCompanyId) {
-      fetchCategoryGroups();
-      fetchCategories();
-      fetchCompanyCategories();
-    }
-  }, [selectedCompanyId]);
 
   const fetchCompanies = async () => {
     try {
@@ -82,28 +79,27 @@ export const Categories = () => {
     }
   };
 
-  const fetchCompanyCategories = async () => {
+  const fetchAllCompanyCategories = async () => {
     try {
       const { data, error } = await supabase
         .from('company_categories')
-        .select('*')
-        .eq('company_id', selectedCompanyId);
+        .select('*');
 
       if (error) throw error;
       setCompanyCategories(data || []);
     } catch (err) {
-      console.error('Erro ao carregar categorias da empresa:', err);
-      setError('Erro ao carregar categorias da empresa');
+      console.error('Erro ao carregar categorias das empresas:', err);
+      setError('Erro ao carregar categorias das empresas');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateGroup = async (type: 'revenue' | 'expense', name: string) => {
+  const handleCreateGroup = async (type: 'revenue' | 'expense') => {
     try {
       const { data, error } = await supabase
         .from('category_groups')
-        .insert([{ name, type }])
+        .insert([{ name: 'Novo Grupo', type }])
         .select()
         .single();
 
@@ -117,54 +113,37 @@ export const Categories = () => {
 
   const handleCreateCategory = async (
     type: 'revenue' | 'expense',
-    name: string,
     groupId: string | null = null
   ) => {
     try {
-      // 1. Criar categoria
       const { data: category, error: categoryError } = await supabase
         .from('categories')
-        .insert([{ name, type, group_id: groupId }])
+        .insert([{ name: 'Nova Categoria', type, group_id: groupId }])
         .select()
         .single();
 
       if (categoryError) throw categoryError;
 
-      // 2. Vincular à empresa
       if (category) {
-        const { error: linkError } = await supabase
-          .from('company_categories')
-          .insert([{
-            company_id: selectedCompanyId,
-            category_id: category.id,
-            is_active: true
-          }]);
-
-        if (linkError) throw linkError;
+        setCategories([...categories, category]);
       }
-
-      await Promise.all([
-        fetchCategories(),
-        fetchCompanyCategories()
-      ]);
     } catch (err) {
       console.error('Erro ao criar categoria:', err);
       setError('Erro ao criar categoria');
     }
   };
 
-  const handleUpdateCategory = async (
-    categoryId: string,
-    updates: Partial<Category>
-  ) => {
+  const handleUpdateCategory = async (categoryId: string, name: string) => {
     try {
       const { error } = await supabase
         .from('categories')
-        .update(updates)
+        .update({ name })
         .eq('id', categoryId);
 
       if (error) throw error;
-      await fetchCategories();
+      setCategories(categories.map(cat => 
+        cat.id === categoryId ? { ...cat, name } : cat
+      ));
     } catch (err) {
       console.error('Erro ao atualizar categoria:', err);
       setError('Erro ao atualizar categoria');
@@ -179,30 +158,47 @@ export const Categories = () => {
         .eq('id', categoryId);
 
       if (error) throw error;
-      await Promise.all([
-        fetchCategories(),
-        fetchCompanyCategories()
-      ]);
+      setCategories(categories.filter(cat => cat.id !== categoryId));
+      setCompanyCategories(companyCategories.filter(cc => cc.category_id !== categoryId));
     } catch (err) {
       console.error('Erro ao excluir categoria:', err);
       setError('Erro ao excluir categoria');
     }
   };
 
-  const handleToggleCategoryStatus = async (categoryId: string) => {
+  const handleToggleCategoryStatus = async (categoryId: string, companyId: string) => {
     try {
-      const currentStatus = companyCategories.find(
-        cc => cc.category_id === categoryId
-      )?.is_active;
+      const existingLink = companyCategories.find(
+        cc => cc.category_id === categoryId && cc.company_id === companyId
+      );
 
-      const { error } = await supabase
-        .from('company_categories')
-        .update({ is_active: !currentStatus })
-        .eq('category_id', categoryId)
-        .eq('company_id', selectedCompanyId);
+      if (existingLink) {
+        // Remove o vínculo
+        const { error } = await supabase
+          .from('company_categories')
+          .delete()
+          .eq('category_id', categoryId)
+          .eq('company_id', companyId);
 
-      if (error) throw error;
-      await fetchCompanyCategories();
+        if (error) throw error;
+        setCompanyCategories(companyCategories.filter(
+          cc => !(cc.category_id === categoryId && cc.company_id === companyId)
+        ));
+      } else {
+        // Cria novo vínculo
+        const { data, error } = await supabase
+          .from('company_categories')
+          .insert([{
+            company_id: companyId,
+            category_id: categoryId,
+            is_active: true
+          }])
+          .select()
+          .single();
+
+        if (error) throw error;
+        setCompanyCategories([...companyCategories, data]);
+      }
     } catch (err) {
       console.error('Erro ao alterar status da categoria:', err);
       setError('Erro ao alterar status da categoria');
@@ -213,7 +209,6 @@ export const Categories = () => {
     if (!copyFromCompanyId || !copyToCompanyId) return;
 
     try {
-      // 1. Obter categorias da empresa de origem
       const { data: sourceCategories, error: sourceError } = await supabase
         .from('company_categories')
         .select(`
@@ -224,7 +219,6 @@ export const Categories = () => {
 
       if (sourceError) throw sourceError;
 
-      // 2. Criar vínculos para a empresa de destino
       const newLinks = sourceCategories?.map(sc => ({
         company_id: copyToCompanyId,
         category_id: sc.category_id,
@@ -242,18 +236,18 @@ export const Categories = () => {
       setShowCopyModal(false);
       setCopyFromCompanyId('');
       setCopyToCompanyId('');
-      
-      if (selectedCompanyId === copyToCompanyId) {
-        await fetchCompanyCategories();
-      }
+      fetchAllCompanyCategories();
     } catch (err) {
       console.error('Erro ao copiar categorias:', err);
       setError('Erro ao copiar categorias');
     }
   };
 
-  const getCategoryStatus = (categoryId: string): boolean => {
-    return companyCategories.find(cc => cc.category_id === categoryId)?.is_active ?? false;
+  const getCategoryStatus = (categoryId: string, companyId: string): boolean => {
+    return companyCategories.some(cc => 
+      cc.category_id === categoryId && 
+      cc.company_id === companyId
+    );
   };
 
   if (loading) {
@@ -265,6 +259,15 @@ export const Categories = () => {
       </div>
     );
   }
+
+  const filteredCategories = selectedCompanyId
+    ? categories.filter(cat => 
+        companyCategories.some(cc => 
+          cc.category_id === cat.id && 
+          cc.company_id === selectedCompanyId
+        )
+      )
+    : categories;
 
   return (
     <div className="max-w-6xl mx-auto py-8">
@@ -288,14 +291,14 @@ export const Categories = () => {
 
           <div>
             <label className="block text-sm font-medium text-zinc-400 mb-2">
-              Empresa
+              Filtrar por Empresa
             </label>
             <select
               value={selectedCompanyId}
               onChange={(e) => setSelectedCompanyId(e.target.value)}
               className="bg-zinc-800 text-zinc-100 rounded-lg px-4 py-3 w-full md:w-96"
             >
-              <option value="">Selecione uma empresa</option>
+              <option value="">Todas as empresas</option>
               {companies.map(company => (
                 <option key={company.id} value={company.id}>
                   {company.trading_name} - {company.name}
@@ -307,400 +310,46 @@ export const Categories = () => {
       </div>
 
       {/* Conteúdo Principal */}
-      {selectedCompanyId ? (
-        <div className="space-y-8">
-          {/* Receitas */}
-          <div className="bg-zinc-900 rounded-xl p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-zinc-100">Receitas</h2>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    const name = window.prompt('Nome do grupo:');
-                    if (name) handleCreateGroup('revenue', name);
-                  }}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 flex items-center gap-2"
-                >
-                  <FolderPlus size={16} />
-                  Novo Grupo
-                </button>
-                <button
-                  onClick={() => {
-                    const name = window.prompt('Nome da categoria:');
-                    if (name) handleCreateCategory('revenue', name);
-                  }}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white flex items-center gap-2"
-                >
-                  <Plus size={16} />
-                  Nova Receita
-                </button>
-              </div>
-            </div>
+      <div className="space-y-8">
+        <CategorySection
+          title="Receitas"
+          type="revenue"
+          groups={categoryGroups}
+          categories={filteredCategories}
+          companies={companies}
+          onCreateGroup={handleCreateGroup}
+          onCreateCategory={handleCreateCategory}
+          onToggleStatus={handleToggleCategoryStatus}
+          onUpdateCategory={handleUpdateCategory}
+          onDeleteCategory={handleDeleteCategory}
+          getCategoryStatus={getCategoryStatus}
+        />
 
-            <div className="space-y-4">
-              {categoryGroups
-                .filter(group => group.type === 'revenue')
-                .map(group => {
-                  const groupCategories = categories.filter(
-                    cat => cat.group_id === group.id
-                  );
+        <CategorySection
+          title="Despesas"
+          type="expense"
+          groups={categoryGroups}
+          categories={filteredCategories}
+          companies={companies}
+          onCreateGroup={handleCreateGroup}
+          onCreateCategory={handleCreateCategory}
+          onToggleStatus={handleToggleCategoryStatus}
+          onUpdateCategory={handleUpdateCategory}
+          onDeleteCategory={handleDeleteCategory}
+          getCategoryStatus={getCategoryStatus}
+        />
+      </div>
 
-                  return (
-                    <div key={group.id} className="bg-zinc-800/50 rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-medium text-zinc-200">{group.name}</h3>
-                        <button
-                          onClick={() => {
-                            const name = window.prompt('Nome da categoria:');
-                            if (name) handleCreateCategory('revenue', name, group.id);
-                          }}
-                          className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 text-sm flex items-center gap-2"
-                        >
-                          <Plus size={16} />
-                          Adicionar Categoria
-                        </button>
-                      </div>
-
-                      <div className="space-y-2">
-                        {groupCategories.map(category => (
-                          <div
-                            key={category.id}
-                            className={`flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg ${
-                              !getCategoryStatus(category.id) && 'opacity-50'
-                            }`}
-                          >
-                            <div className="flex items-center gap-4">
-                              <span className="text-zinc-400 font-mono text-sm">
-                                {category.code}
-                              </span>
-                              <span className="text-zinc-100">{category.name}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => handleToggleCategoryStatus(category.id)}
-                                className={`p-1 hover:bg-zinc-700 rounded-lg transition-colors ${
-                                  getCategoryStatus(category.id)
-                                    ? 'text-green-400'
-                                    : 'text-red-400'
-                                }`}
-                              >
-                                <Power size={16} />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const newName = window.prompt('Novo nome:', category.name);
-                                  if (newName) handleUpdateCategory(category.id, { name: newName });
-                                }}
-                                className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
-                              >
-                                <PencilIcon size={16} />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (window.confirm('Tem certeza que deseja excluir esta categoria?')) {
-                                    handleDeleteCategory(category.id);
-                                  }
-                                }}
-                                className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-
-              {/* Categorias sem grupo */}
-              <div className="bg-zinc-800/50 rounded-lg p-4">
-                <h3 className="text-lg font-medium text-zinc-200 mb-4">Sem Grupo</h3>
-                <div className="space-y-2">
-                  {categories
-                    .filter(cat => cat.type === 'revenue' && !cat.group_id)
-                    .map(category => (
-                      <div
-                        key={category.id}
-                        className={`flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg ${
-                          !getCategoryStatus(category.id) && 'opacity-50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <span className="text-zinc-400 font-mono text-sm">
-                            {category.code}
-                          </span>
-                          <span className="text-zinc-100">{category.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleToggleCategoryStatus(category.id)}
-                            className={`p-1 hover:bg-zinc-700 rounded-lg transition-colors ${
-                              getCategoryStatus(category.id)
-                                ? 'text-green-400'
-                                : 'text-red-400'
-                            }`}
-                          >
-                            <Power size={16} />
-                          </button>
-                          <button
-                            onClick={() => {
-                              const newName = window.prompt('Novo nome:', category.name);
-                              if (newName) handleUpdateCategory(category.id, { name: newName });
-                            }}
-                            className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
-                          >
-                            <PencilIcon size={16} />
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (window.confirm('Tem certeza que deseja excluir esta categoria?')) {
-                                handleDeleteCategory(category.id);
-                              }
-                            }}
-                            className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Despesas */}
-          <div className="bg-zinc-900 rounded-xl p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-zinc-100">Despesas</h2>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    const name = window.prompt('Nome do grupo:');
-                    if (name) handleCreateGroup('expense', name);
-                  }}
-                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 flex items-center gap-2"
-                >
-                  <FolderPlus size={16} />
-                  Novo Grupo
-                </button>
-                <button
-                  onClick={() => {
-                    const name = window.prompt('Nome da categoria:');
-                    if (name) handleCreateCategory('expense', name);
-                  }}
-                  className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white flex items-center gap-2"
-                >
-                  <Plus size={16} />
-                  Nova Despesa
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {categoryGroups
-                .filter(group => group.type === 'expense')
-                .map(group => {
-                  const groupCategories = categories.filter(
-                    cat => cat.group_id === group.id
-                  );
-
-                  return (
-                    <div key={group.id} className="bg-zinc-800/50 rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-lg font-medium text-zinc-200">{group.name}</h3>
-                        <button
-                          onClick={() => {
-                            const name = window.prompt('Nome da categoria:');
-                            if (name) handleCreateCategory('expense', name, group.id);
-                          }}
-                          className="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 text-sm flex items-center gap-2"
-                        >
-                          <Plus size={16} />
-                          Adicionar Categoria
-                        </button>
-                      </div>
-
-                      <div className="space-y-2">
-                        {groupCategories.map(category => (
-                          <div
-                            key={category.id}
-                            className={`flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg ${
-                              !getCategoryStatus(category.id) && 'opacity-50'
-                            }`}
-                          >
-                            <div className="flex items-center gap-4">
-                              <span className="text-zinc-400 font-mono text-sm">
-                                {category.code}
-                              </span>
-                              <span className="text-zinc-100">{category.name}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => handleToggleCategoryStatus(category.id)}
-                                className={`p-1 hover:bg-zinc-700 rounded-lg transition-colors ${
-                                  getCategoryStatus(category.id)
-                                    ? 'text-green-400'
-                                    : 'text-red-400'
-                                }`}
-                              >
-                                <Power size={16} />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  const newName = window.prompt('Novo nome:', category.name);
-                                  if (newName) handleUpdateCategory(category.id, { name: newName });
-                                }}
-                                className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
-                              >
-                                <PencilIcon size={16} />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (window.confirm('Tem certeza que deseja excluir esta categoria?')) {
-                                    handleDeleteCategory(category.id);
-                                  }
-                                }}
-                                className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-
-              {/* Categorias sem grupo */}
-              <div className="bg-zinc-800/50 rounded-lg p-4">
-                <h3 className="text-lg font-medium text-zinc-200 mb-4">Sem Grupo</h3>
-                <div className="space-y-2">
-                  {categories
-                    .filter(cat => cat.type === 'expense' && !cat.group_id)
-                    .map(category => (
-                      <div
-                        key={category.id}
-                        className={`flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg ${
-                          !getCategoryStatus(category.id) && 'opacity-50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <span className="text-zinc-400 font-mono text-sm">
-                            {category.code}
-                          </span>
-                          <span className="text-zinc-100">{category.name}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleToggleCategoryStatus(category.id)}
-                            className={`p-1 hover:bg-zinc-700 rounded-lg transition-colors ${
-                              getCategoryStatus(category.id)
-                                ? 'text-green-400'
-                                : 'text-red-400'
-                            }`}
-                          >
-                            <Power size={16} />
-                          </button>
-                          <button
-                            onClick={() => {
-                              const newName = window.prompt('Novo nome:', category.name);
-                              if (newName) handleUpdateCategory(category.id, { name: newName });
-                            }}
-                            className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
-                          >
-                            <PencilIcon size={16} />
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (window.confirm('Tem certeza que deseja excluir esta categoria?')) {
-                                handleDeleteCategory(category.id);
-                              }
-                            }}
-                            className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="bg-zinc-900 rounded-xl p-8 text-center">
-          <p className="text-zinc-400">Selecione uma empresa para gerenciar suas categorias</p>
-        </div>
-      )}
-
-      {/* Modal de Cópia */}
-      {showCopyModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold text-zinc-100 mb-4">
-              Copiar Categorias
-            </h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-1">
-                  Copiar de:
-                </label>
-                <select
-                  value={copyFromCompanyId}
-                  onChange={(e) => setCopyFromCompanyId(e.target.value)}
-                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
-                >
-                  <option value="">Selecione uma empresa</option>
-                  {companies.map(company => (
-                    <option key={company.id} value={company.id}>
-                      {company.trading_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-1">
-                  Copiar para:
-                </label>
-                <select
-                  value={copyToCompanyId}
-                  onChange={(e) => setCopyToCompanyId(e.target.value)}
-                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
-                >
-                  <option value="">Selecione uma empresa</option>
-                  {companies.map(company => (
-                    <option key={company.id} value={company.id}>
-                      {company.trading_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                onClick={() => setShowCopyModal(false)}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleCopyCategories}
-                disabled={!copyFromCompanyId || !copyToCompanyId}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Copiar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CopyModal
+        isOpen={showCopyModal}
+        onClose={() => setShowCopyModal(false)}
+        companies={companies}
+        copyFromCompanyId={copyFromCompanyId}
+        copyToCompanyId={copyToCompanyId}
+        onCopyFromChange={setCopyFromCompanyId}
+        onCopyToChange={setCopyToCompanyId}
+        onCopy={handleCopyCategories}
+      />
     </div>
   );
 };
