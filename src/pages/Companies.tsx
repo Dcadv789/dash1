@@ -60,18 +60,21 @@ export const Companies = () => {
 
   const handleSaveCompany = async (companyData: any) => {
     try {
+      const companyPayload = {
+        id: editingCompany?.id, // Incluir o ID apenas se estiver editando
+        name: companyData.name,
+        trading_name: companyData.tradingName,
+        cnpj: companyData.cnpj,
+        phone: companyData.phone,
+        email: companyData.email,
+        contract_start_date: companyData.contractStartDate,
+        is_active: companyData.isActive
+      };
+
+      // Se estiver editando, inclui o ID no payload
       const { data: company, error: companyError } = await supabase
         .from('companies')
-        .upsert([{
-          id: companyData.id,
-          name: companyData.name,
-          trading_name: companyData.tradingName,
-          cnpj: companyData.cnpj,
-          phone: companyData.phone,
-          email: companyData.email,
-          contract_start_date: companyData.contractStartDate,
-          is_active: companyData.isActive
-        }])
+        .upsert([companyPayload])
         .select()
         .single();
 

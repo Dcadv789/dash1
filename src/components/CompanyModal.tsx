@@ -171,11 +171,9 @@ export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: Compan
       }
     }
 
-    const companyId = editingCompany?.id || crypto.randomUUID();
-
+    // Não vamos mais gerar o ID aqui, deixaremos o banco de dados gerar através da trigger
     onSave({
       ...companyData,
-      id: companyId,
       logoUrl
     });
   };
