@@ -96,15 +96,25 @@ export const Dre = () => {
     const selectedCompany = companies.find(c => c.id === selectedCompanyId);
     if (!selectedCompany) return [];
 
-    return accounts.filter(acc => {
+    const availableAccounts = accounts.filter(acc => {
+      // Filtra apenas contas da empresa selecionada
       if (acc.companyId !== selectedCompanyId) return false;
+      
+      // Filtra apenas contas do tipo totalizador ou em branco
       if (acc.type !== 'total' && acc.type !== 'blank') return false;
+      
+      // Não permite selecionar a própria conta como pai
       if (acc.id === currentAccountId) return false;
+      
+      // Não permite selecionar descendentes da conta atual como pai
       if (isDescendant(acc.id, currentAccountId)) return false;
 
+      // Verifica o nível máximo permitido
       const level = getAccountLevel(acc.id);
       return level < (selectedCompany.maxDreLevel - 1);
     });
+
+    return availableAccounts;
   };
 
   const getAccountLevel = (accountId: string | null): number => {
