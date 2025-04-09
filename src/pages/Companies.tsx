@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Building, Edit, Trash2, Plus, Power, Mail, Users, Eye, Calendar } from 'lucide-react';
+import { Building, Edit, Trash2, Plus, Power, Eye, Calendar, Hash } from 'lucide-react';
 
 interface Partner {
   name: string;
@@ -67,6 +67,13 @@ export const Companies = () => {
     contractStartDate: new Date().toISOString().split('T')[0]
   });
 
+  const generateNewId = () => {
+    const maxId = companies
+      .map(c => parseInt(c.id.replace('COMP', '')))
+      .reduce((max, current) => Math.max(max, current), 0);
+    return `COMP${(maxId + 1).toString().padStart(3, '0')}`;
+  };
+
   const calculateMonthsAsClient = (startDate: string) => {
     const start = new Date(startDate);
     const now = new Date();
@@ -94,7 +101,7 @@ export const Companies = () => {
   const handleNewCompany = () => {
     setEditingCompany(null);
     setFormData({
-      id: `COMP${(companies.length + 1).toString().padStart(3, '0')}`,
+      id: generateNewId(),
       name: '',
       tradingName: '',
       cnpj: '',
@@ -128,6 +135,11 @@ export const Companies = () => {
   };
 
   const handleSave = () => {
+    if (!formData.name.trim() || !formData.tradingName.trim() || !formData.cnpj.trim()) {
+      alert('Por favor, preencha todos os campos obrigatórios.');
+      return;
+    }
+
     if (editingCompany) {
       setCompanies(companies.map(company => 
         company.id === editingCompany.id ? formData : company
@@ -171,11 +183,10 @@ export const Companies = () => {
           <table className="w-full">
             <thead>
               <tr className="border-b border-zinc-800">
+                <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">ID</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Empresa</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">CNPJ</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Email</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Início Contrato</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Sócios</th>
                 <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">Status</th>
                 <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-400">Ações</th>
               </tr>
@@ -183,6 +194,12 @@ export const Companies = () => {
             <tbody>
               {companies.map((company) => (
                 <tr key={company.id} className="border-b border-zinc-800 hover:bg-zinc-800/50">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <Hash size={16} className="text-zinc-500" />
+                      <span className="text-zinc-400 font-mono">{company.id}</span>
+                    </div>
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="h-8 w-8 rounded-full bg-zinc-800 flex items-center justify-center">
@@ -199,12 +216,6 @@ export const Companies = () => {
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
-                      <Mail size={16} className="text-zinc-500" />
-                      <span className="text-zinc-400">{company.email}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
                       <Calendar size={16} className="text-zinc-500" />
                       <div>
                         <span className="text-zinc-400">{formatDate(company.contractStartDate)}</span>
@@ -212,12 +223,6 @@ export const Companies = () => {
                           Cliente há {calculateMonthsAsClient(company.contractStartDate)} meses
                         </span>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <Users size={16} className="text-zinc-500" />
-                      <span className="text-zinc-400">{company.partners.length} sócios</span>
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -286,6 +291,10 @@ export const Companies = () => {
             <div className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
+                  <h3 className="text-sm font-medium text-zinc-400 mb-1">ID</h3>
+                  <p className="text-zinc-100 font-mono">{viewingCompany.id}</p>
+                </div>
+                <div>
                   <h3 className="text-sm font-medium text-zinc-400 mb-1">CNPJ</h3>
                   <p className="text-zinc-100">{viewingCompany.cnpj}</p>
                 </div>
@@ -305,6 +314,10 @@ export const Companies = () => {
                       Cliente há {calculateMonthsAsClient(viewingCompany.contractStartDate)} meses
                     </span>
                   </p>
+                </div>
+                <div>
+                  <h3 className="text-sm font-medium text-zinc-400 mb-1">Quantidade de Sócios</h3>
+                  <p className="text-zinc-100">{viewingCompany.partners.length} sócios</p>
                 </div>
               </div>
 
@@ -360,6 +373,7 @@ export const Companies = () => {
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                    required
                   />
                 </div>
                 <div>
@@ -371,6 +385,7 @@ export const Companies = () => {
                     value={formData.tradingName}
                     onChange={(e) => setFormData({ ...formData, tradingName: e.target.value })}
                     className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                    required
                   />
                 </div>
               </div>
@@ -385,6 +400,7 @@ export const Companies = () => {
                     value={formData.cnpj}
                     onChange={(e) => setFormData({ ...formData, cnpj: e.target.value })}
                     className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                    required
                   />
                 </div>
                 <div>
@@ -396,6 +412,7 @@ export const Companies = () => {
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                    required
                   />
                 </div>
               </div>
@@ -421,6 +438,7 @@ export const Companies = () => {
                     value={formData.contractStartDate}
                     onChange={(e) => setFormData({ ...formData, contractStartDate: e.target.value })}
                     className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                    required
                   />
                 </div>
               </div>
@@ -459,6 +477,7 @@ export const Companies = () => {
                             onChange={(e) => handlePartnerChange(index, 'name', e.target.value)}
                             placeholder="Nome"
                             className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                            required
                           />
                         </div>
                         <div>
@@ -468,6 +487,7 @@ export const Companies = () => {
                             onChange={(e) => handlePartnerChange(index, 'cpf', e.target.value)}
                             placeholder="CPF"
                             className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                            required
                           />
                         </div>
                         <div>
@@ -477,6 +497,7 @@ export const Companies = () => {
                             onChange={(e) => handlePartnerChange(index, 'email', e.target.value)}
                             placeholder="Email"
                             className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                            required
                           />
                         </div>
                         <div>
