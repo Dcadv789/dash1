@@ -5,7 +5,7 @@ interface DreAccount {
   id: string;
   code: string;
   name: string;
-  type: 'revenue' | 'expense' | 'total';
+  type: 'revenue' | 'expense' | 'total' | 'blank';
   displayOrder: number;
   companyId: string;
   isEditing?: boolean;
@@ -103,7 +103,7 @@ export const Dre = () => {
   const [copyFromCompanyId, setCopyFromCompanyId] = useState<string>('');
   const [copyToCompanyId, setCopyToCompanyId] = useState<string>('');
   const [showNewAccountModal, setShowNewAccountModal] = useState(false);
-  const [newAccountType, setNewAccountType] = useState<'category' | 'indicator' | 'total'>('category');
+  const [newAccountType, setNewAccountType] = useState<'category' | 'indicator' | 'total' | 'blank'>('category');
   const [categoryType, setCategoryType] = useState<'revenue' | 'expense'>('revenue');
   const [categorySearch, setCategorySearch] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<Category[]>([]);
@@ -134,7 +134,7 @@ export const Dre = () => {
     return accounts.filter(acc => {
       const level = getAccountLevel(acc.id);
       return acc.companyId === selectedCompanyId && 
-             acc.type === 'total' && 
+             (acc.type === 'total' || acc.type === 'blank') && 
              level < (selectedCompany.maxDreLevel - 1);
     });
   };
@@ -216,7 +216,7 @@ export const Dre = () => {
       id: Math.random().toString(36).substr(2, 9),
       code: `A${(accounts.length + 1).toString().padStart(2, '0')}`,
       name: newAccountName,
-      type: newAccountType === 'category' ? categoryType : 'total',
+      type: newAccountType === 'category' ? categoryType : newAccountType,
       displayOrder: maxOrder + 1,
       companyId: selectedCompanyId,
       parentAccountId: selectedParentAccount,
@@ -400,14 +400,14 @@ export const Dre = () => {
           </div>
 
           <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1">
+            <div className="md:w-96">
               <label className="block text-sm font-medium text-zinc-400 mb-2">
                 Empresa
               </label>
               <select
                 value={selectedCompanyId}
                 onChange={(e) => setSelectedCompanyId(e.target.value)}
-                className="bg-zinc-800 text-zinc-100 rounded-lg px-4 py-3 w-full"
+                className="bg-zinc-800 text-zinc-100 rounded-lg px-4 py-3 w-full appearance-none pr-10"
               >
                 <option value="">Selecione uma empresa</option>
                 {companies.filter(c => c.isActive).map(company => (
@@ -426,7 +426,7 @@ export const Dre = () => {
                 <select
                   value={companies.find(c => c.id === selectedCompanyId)?.maxDreLevel || 3}
                   onChange={(e) => updateCompanyMaxLevel(selectedCompanyId, Number(e.target.value))}
-                  className="bg-zinc-800 text-zinc-100 rounded-lg px-4 py-3 w-full"
+                  className="bg-zinc-800 text-zinc-100 rounded-lg px-4 py-3 w-full appearance-none pr-10"
                 >
                   <option value={3}>3 Níveis</option>
                   <option value={4}>4 Níveis</option>
@@ -500,7 +500,7 @@ export const Dre = () => {
                 <select
                   value={selectedParentAccount || ''}
                   onChange={(e) => setSelectedParentAccount(e.target.value || null)}
-                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 appearance-none pr-10"
                 >
                   <option value="">Nenhuma (Conta Principal)</option>
                   {getAvailableParentAccounts().map(account => (
@@ -542,6 +542,15 @@ export const Dre = () => {
                       className="text-blue-600"
                     />
                     <span className="text-zinc-300">Totalizador</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      checked={newAccountType === 'blank'}
+                      onChange={() => setNewAccountType('blank')}
+                      className="text-blue-600"
+                    />
+                    <span className="text-zinc-300">Em Branco</span>
                   </label>
                 </div>
               </div>
@@ -765,7 +774,6 @@ export const Dre = () => {
 
       {showCopyModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          
           <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold text-zinc-100 mb-4">
               Copiar DRE
