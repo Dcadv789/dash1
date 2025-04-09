@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, User, Plus, Trash2 } from 'lucide-react';
+import { X, User, Plus, Trash2, Upload } from 'lucide-react';
 import { Company } from '../types/company';
+import { supabase } from '../lib/supabase';
 
 interface Partner {
   id: string;
@@ -44,10 +45,6 @@ const formatCPF = (value: string) => {
     .slice(0, 14);
 };
 
-const generateCompanyCode = () => {
-  return `CP${Math.floor(Math.random() * 9999).toString().padStart(4, '0')}`;
-};
-
 export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: CompanyModalProps) => {
   const [companyData, setCompanyData] = useState({
     name: '',
@@ -58,7 +55,8 @@ export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: Compan
     contractStartDate: '',
     isActive: true,
     partners: [] as Partner[],
-    code: ''
+    code: '',
+    logoUrl: ''
   });
 
   const [newPartner, setNewPartner] = useState<Partner>({
@@ -68,6 +66,9 @@ export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: Compan
     email: '',
     phone: ''
   });
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>('');
 
   useEffect(() => {
     if (editingCompany) {
@@ -80,22 +81,45 @@ export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: Compan
         contractStartDate: editingCompany.contractStartDate || '',
         isActive: editingCompany.isActive ?? true,
         partners: editingCompany.partners || [],
-        code: editingCompany.code || ''
+        code: editingCompany.code || '',
+        logoUrl: editingCompany.logoUrl || ''
       });
+      if (editingCompany.logoUrl) {
+        setPreviewUrl(editingCompany.logoUrl);
+      }
     } else {
-      setCompanyData({
-        name: '',
-        tradingName: '',
-        cnpj: '',
-        phone: '',
-        email: '',
-        contractStartDate: '',
-        isActive: true,
-        partners: [],
-        code: generateCompanyCode()
-      });
+      resetForm();
     }
   }, [editingCompany]);
+
+  const resetForm = () => {
+    setCompanyData({
+      name: '',
+      tradingName: '',
+      cnpj: '',
+      phone: '',
+      email: '',
+      contractStartDate: '',
+      isActive: true,
+      partners: [],
+      code: '',
+      logoUrl: ''
+    });
+    setSelectedFile(null);
+    setPreviewUrl('');
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPreviewUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleAddPartner = () => {
     if (!newPartner.name || !newPartner.cpf) return;
@@ -121,12 +145,38 @@ export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: Compan
     }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    let logoUrl = companyData.logoUrl;
+
+    if (selectedFile) {
+      const fileExt = selectedFile.name.split('.').pop();
+      const fileName = `${crypto.randomUUID()}.${fileExt}`;
+      const filePath = `company-logos/${fileName}`;
+
+      const { error: uploadError, data } = await supabase.storage
+        .from('logos')
+        .upload(filePath, selectedFile);
+
+      if (uploadError) {
+        console.error('Erro ao fazer upload da logo:', uploadError);
+        return;
+      }
+
+      if (data) {
+        const { data: { publicUrl } } = supabase.storage
+          .from('logos')
+          .getPublicUrl(filePath);
+        
+        logoUrl = publicUrl;
+      }
+    }
+
     const companyId = editingCompany?.id || crypto.randomUUID();
 
     onSave({
       ...companyData,
-      id: companyId
+      id: companyId,
+      logoUrl
     });
   };
 
@@ -147,20 +197,44 @@ export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: Compan
           </button>
         </div>
 
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-zinc-400 mb-2">
+            Logo da Empresa
+          </label>
+          <div className="flex items-center gap-4">
+            <div className="h-24 w-24 rounded-lg bg-zinc-800 flex items-center justify-center overflow-hidden">
+              {previewUrl ? (
+                <img 
+                  src={previewUrl} 
+                  alt="Logo preview" 
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <Upload size={24} className="text-zinc-600" />
+              )}
+            </div>
+            <div className="flex-1">
+              <label className="flex flex-col">
+                <div className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 cursor-pointer inline-flex items-center gap-2 w-fit">
+                  <Upload size={16} />
+                  Escolher arquivo
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={handleFileSelect}
+                  />
+                </div>
+                <span className="text-xs text-zinc-500 mt-2">
+                  Recomendado: 400x400px, PNG ou JPG
+                </span>
+              </label>
+            </div>
+          </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-zinc-400 mb-1">
-                Código da Empresa
-              </label>
-              <input
-                type="text"
-                value={companyData.code}
-                readOnly
-                className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 opacity-50"
-              />
-            </div>
-
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-1">
                 Razão Social
@@ -269,8 +343,8 @@ export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: Compan
             </button>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 mb-4">
-            <div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div className="space-y-4">
               <input
                 type="text"
                 value={newPartner.name}
@@ -278,8 +352,6 @@ export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: Compan
                 className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
                 placeholder="Nome do Sócio"
               />
-            </div>
-            <div>
               <input
                 type="text"
                 value={newPartner.cpf}
@@ -289,7 +361,7 @@ export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: Compan
                 maxLength={14}
               />
             </div>
-            <div>
+            <div className="space-y-4">
               <input
                 type="email"
                 value={newPartner.email}
@@ -297,8 +369,6 @@ export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: Compan
                 className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
                 placeholder="Email do Sócio"
               />
-            </div>
-            <div>
               <input
                 type="text"
                 value={newPartner.phone}
@@ -313,12 +383,14 @@ export const CompanyModal = ({ isOpen, onClose, onSave, editingCompany }: Compan
             <div className="space-y-2 mt-4">
               {companyData.partners.map((partner) => (
                 <div key={partner.id} className="flex items-center justify-between bg-zinc-800/50 p-3 rounded-lg">
-                  <div>
-                    <p className="text-zinc-200">{partner.name}</p>
-                    <div className="flex gap-4 text-sm text-zinc-500">
-                      <span>{partner.cpf}</span>
-                      <span>{partner.email}</span>
-                      <span>{partner.phone}</span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 flex-1">
+                    <div>
+                      <p className="text-zinc-200">{partner.name}</p>
+                      <p className="text-sm text-zinc-500">{partner.cpf}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-zinc-500">{partner.email}</p>
+                      <p className="text-sm text-zinc-500">{partner.phone}</p>
                     </div>
                   </div>
                   <button
