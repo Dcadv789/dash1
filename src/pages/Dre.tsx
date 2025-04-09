@@ -127,7 +127,7 @@ export const Dre = () => {
     return 1 + getAccountLevel(account.parentAccountId);
   };
 
-  const getAvailableParentAccounts = () => {
+  const getAvailableParentAccounts = (currentAccountId?: string) => {
     const selectedCompany = companies.find(c => c.id === selectedCompanyId);
     if (!selectedCompany) return [];
 
@@ -135,8 +135,20 @@ export const Dre = () => {
       const level = getAccountLevel(acc.id);
       return acc.companyId === selectedCompanyId && 
              (acc.type === 'total' || acc.type === 'blank') && 
-             level < (selectedCompany.maxDreLevel - 1);
+             level < (selectedCompany.maxDreLevel - 1) &&
+             acc.id !== currentAccountId && // Não permitir a própria conta como pai
+             !isDescendant(acc.id, currentAccountId); // Não permitir descendentes como pai
     });
+  };
+
+  const isDescendant = (potentialParentId: string, accountId?: string): boolean => {
+    if (!accountId) return false;
+    
+    const account = accounts.find(acc => acc.id === accountId);
+    if (!account) return false;
+    
+    if (account.parentAccountId === potentialParentId) return true;
+    return isDescendant(potentialParentId, account.parentAccountId);
   };
 
   const toggleAccountExpansion = (accountId: string) => {
@@ -238,13 +250,50 @@ export const Dre = () => {
     setShowNewAccountModal(false);
   };
 
+  const startEditingAccount = (account: DreAccount) => {
+    setEditingAccount(account);
+    setNewAccountName(account.name);
+    setNewAccountType(account.type === 'revenue' || account.type === 'expense' ? 'category' : account.type);
+    setCategoryType(account.type as 'revenue' | 'expense');
+    setSelectedParentAccount(account.parentAccountId);
+    
+    if (account.categoryIds) {
+      const selectedCats = categories.filter(c => account.categoryIds?.includes(c.id));
+      setSelectedCategories(selectedCats);
+    }
+    
+    if (account.indicatorId) {
+      const indicator = indicators.find(i => i.id === account.indicatorId);
+      if (indicator) setSelectedIndicator(indicator);
+    }
+    
+    if (account.selectedAccounts) {
+      setSelectedDreAccounts(account.selectedAccounts);
+    }
+    
+    setShowNewAccountModal(true);
+  };
+
   const handleEditAccount = () => {
     if (!editingAccount) return;
 
+    const updatedAccount: DreAccount = {
+      ...editingAccount,
+      name: newAccountName,
+      type: newAccountType === 'category' ? categoryType : newAccountType,
+      parentAccountId: selectedParentAccount,
+      categoryIds: newAccountType === 'category' ? selectedCategories.map(c => c.id) : undefined,
+      indicatorId: newAccountType === 'indicator' ? selectedIndicator?.id : undefined,
+      selectedAccounts: newAccountType === 'total' ? selectedDreAccounts : undefined
+    };
+
     setAccounts(accounts.map(acc => 
-      acc.id === editingAccount.id ? editingAccount : acc
+      acc.id === editingAccount.id ? updatedAccount : acc
     ));
+
+    resetNewAccountForm();
     setEditingAccount(null);
+    setShowNewAccountModal(false);
   };
 
   const toggleAccountStatus = (accountId: string) => {
@@ -339,7 +388,7 @@ export const Dre = () => {
                 <Power size={16} />
               </button>
               <button
-                onClick={() => setEditingAccount(account)}
+                onClick={() => startEditingAccount(account)}
                 className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
               >
                 <PencilIcon size={16} />
@@ -463,14 +512,15 @@ export const Dre = () => {
 
       {showNewAccountModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
+          <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-2xl">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-semibold text-zinc-100">
-                Nova Conta
+                {editingAccount ? 'Editar Conta' : 'Nova Conta'}
               </h3>
               <button
                 onClick={() => {
                   setShowNewAccountModal(false);
+                  setEditingAccount(null);
                   resetNewAccountForm();
                 }}
                 className="text-zinc-400 hover:text-zinc-100"
@@ -503,7 +553,7 @@ export const Dre = () => {
                   className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 appearance-none pr-10"
                 >
                   <option value="">Nenhuma (Conta Principal)</option>
-                  {getAvailableParentAccounts().map(account => (
+                  {getAvailableParentAccounts(editingAccount?.id).map(account => (
                     <option key={account.id} value={account.id}>
                       {account.code} - {account.name}
                     </option>
@@ -705,6 +755,7 @@ export const Dre = () => {
                           </button>
                         </div>
                       </div>
+                    
                     </div>
                   )}
                 </div>
@@ -749,6 +800,7 @@ export const Dre = () => {
               <button
                 onClick={() => {
                   setShowNewAccountModal(false);
+                  setEditingAccount(null);
                   resetNewAccountForm();
                 }}
                 className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300"
@@ -756,7 +808,7 @@ export const Dre = () => {
                 Cancelar
               </button>
               <button
-                onClick={handleAddAccount}
+                onClick={editingAccount ? handleEditAccount : handleAddAccount}
                 disabled={
                   !newAccountName ||
                   (newAccountType === 'category' && selectedCategories.length === 0) ||
@@ -765,7 +817,7 @@ export const Dre = () => {
                 }
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Adicionar
+                {editingAccount ? 'Salvar' : 'Adicionar'}
               </button>
             </div>
           </div>
