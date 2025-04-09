@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Copy, PencilIcon, Save, Check, X, Calculator, Power, Trash2 } from 'lucide-react';
+import { Plus, Copy, PencilIcon, Save, Check, X, Calculator, Power, Trash2, Search } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Category, Indicator } from '../types/financial';
 
@@ -7,6 +7,13 @@ interface Company {
   id: string;
   trading_name: string;
   name: string;
+  is_active: boolean;
+}
+
+interface CompanyIndicator {
+  id: string;
+  company_id: string;
+  indicator_id: string;
   is_active: boolean;
 }
 
@@ -21,11 +28,13 @@ export const Indicators = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [indicators, setIndicators] = useState<Indicator[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [companyIndicators, setCompanyIndicators] = useState<CompanyIndicator[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNewIndicatorModal, setShowNewIndicatorModal] = useState(false);
   const [editingIndicator, setEditingIndicator] = useState<Indicator | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Form state
   const [newIndicator, setNewIndicator] = useState({
@@ -40,6 +49,7 @@ export const Indicators = () => {
     fetchCompanies();
     fetchCategories();
     fetchIndicators();
+    fetchCompanyIndicators();
   }, []);
 
   const fetchCompanies = async () => {
@@ -90,9 +100,21 @@ export const Indicators = () => {
     }
   };
 
-  const handleCreateIndicator = async () => {
-    if (!selectedCompanyId || !newIndicator.name) return;
+  const fetchCompanyIndicators = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('company_indicators')
+        .select('*');
 
+      if (error) throw error;
+      setCompanyIndicators(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar indicadores das empresas:', err);
+      setError('Erro ao carregar indicadores das empresas');
+    }
+  };
+
+  const handleCreateIndicator = async () => {
     try {
       const { data, error } = await supabase
         .from('indicators')
@@ -102,7 +124,6 @@ export const Indicators = () => {
           calculation_type: newIndicator.calculation_type,
           operation: newIndicator.operation,
           source_ids: newIndicator.source_ids,
-          company_id: selectedCompanyId,
           is_active: true
         }])
         .select()
@@ -159,27 +180,46 @@ export const Indicators = () => {
       if (error) throw error;
 
       setIndicators(indicators.filter(ind => ind.id !== indicatorId));
+      setCompanyIndicators(companyIndicators.filter(ci => ci.indicator_id !== indicatorId));
     } catch (err) {
       console.error('Erro ao excluir indicador:', err);
       setError('Erro ao excluir indicador');
     }
   };
 
-  const toggleIndicatorStatus = async (indicatorId: string) => {
-    const indicator = indicators.find(ind => ind.id === indicatorId);
-    if (!indicator) return;
-
+  const handleToggleIndicatorStatus = async (indicatorId: string, companyId: string) => {
     try {
-      const { error } = await supabase
-        .from('indicators')
-        .update({ is_active: !indicator.is_active })
-        .eq('id', indicatorId);
+      const existingLink = companyIndicators.find(
+        ci => ci.indicator_id === indicatorId && ci.company_id === companyId
+      );
 
-      if (error) throw error;
+      if (existingLink) {
+        // Remove o vínculo
+        const { error } = await supabase
+          .from('company_indicators')
+          .delete()
+          .eq('indicator_id', indicatorId)
+          .eq('company_id', companyId);
 
-      setIndicators(indicators.map(ind =>
-        ind.id === indicatorId ? { ...ind, is_active: !ind.is_active } : ind
-      ));
+        if (error) throw error;
+        setCompanyIndicators(companyIndicators.filter(
+          ci => !(ci.indicator_id === indicatorId && ci.company_id === companyId)
+        ));
+      } else {
+        // Cria novo vínculo
+        const { data, error } = await supabase
+          .from('company_indicators')
+          .insert([{
+            company_id: companyId,
+            indicator_id: indicatorId,
+            is_active: true
+          }])
+          .select()
+          .single();
+
+        if (error) throw error;
+        setCompanyIndicators([...companyIndicators, data]);
+      }
     } catch (err) {
       console.error('Erro ao alterar status do indicador:', err);
       setError('Erro ao alterar status do indicador');
@@ -196,9 +236,27 @@ export const Indicators = () => {
     });
   };
 
-  const filteredIndicators = indicators.filter(ind => 
-    selectedCompanyId ? ind.company_id === selectedCompanyId : true
-  );
+  const getIndicatorStatus = (indicatorId: string, companyId: string): boolean => {
+    return companyIndicators.some(ci => 
+      ci.indicator_id === indicatorId && 
+      ci.company_id === companyId
+    );
+  };
+
+  const filteredIndicators = indicators.filter(indicator => {
+    const matchesCompany = selectedCompanyId
+      ? companyIndicators.some(ci => 
+          ci.indicator_id === indicator.id && 
+          ci.company_id === selectedCompanyId
+        )
+      : true;
+
+    const matchesSearch = searchTerm.toLowerCase() === '' ? true : 
+      indicator.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      indicator.code.toLowerCase().includes(searchTerm.toLowerCase());
+
+    return matchesCompany && matchesSearch;
+  });
 
   if (loading) {
     return (
@@ -233,22 +291,33 @@ export const Indicators = () => {
       )}
 
       <div className="bg-zinc-900 rounded-xl p-8 mb-8">
-        <div>
-          <label className="block text-sm font-medium text-zinc-400 mb-2">
-            Empresa
-          </label>
-          <select
-            value={selectedCompanyId}
-            onChange={(e) => setSelectedCompanyId(e.target.value)}
-            className="bg-zinc-800 text-zinc-100 rounded-lg px-4 py-3 w-full md:w-96"
-          >
-            <option value="">Selecione uma empresa</option>
-            {companies.map(company => (
-              <option key={company.id} value={company.id}>
-                {company.trading_name} - {company.name}
-              </option>
-            ))}
-          </select>
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1">
+            <div className="relative">
+              <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-zinc-400" />
+              <input
+                type="text"
+                placeholder="Buscar indicadores..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 placeholder-zinc-500"
+              />
+            </div>
+          </div>
+          <div className="w-full md:w-64">
+            <select
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+            >
+              <option value="">Todas as empresas</option>
+              {companies.map(company => (
+                <option key={company.id} value={company.id}>
+                  {company.trading_name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -266,55 +335,68 @@ export const Indicators = () => {
             </thead>
             <tbody>
               {filteredIndicators.map((indicator) => (
-                <tr key={indicator.id} className={`border-b border-zinc-800 hover:bg-zinc-800/50 ${!indicator.is_active && 'opacity-50'}`}>
-                  <td className="px-6 py-4">
-                    <span className="text-zinc-400 font-mono">{indicator.code}</span>
-                  </td>
-                  <td className="px-6 py-4 text-zinc-100">{indicator.name}</td>
-                  <td className="px-6 py-4">
-                    <span className={`px-3 py-1 rounded-full text-xs ${
-                      indicator.type === 'manual'
-                        ? 'bg-blue-500/20 text-blue-400'
-                        : 'bg-green-500/20 text-green-400'
-                    }`}>
-                      {indicator.type === 'manual' ? 'Manual' : 'Calculado'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-zinc-400">
-                    {indicator.type === 'calculated' && (
-                      <div className="flex items-center gap-2">
-                        <Calculator size={16} className="text-zinc-500" />
-                        <span>
-                          {indicator.calculation_type === 'category' ? 'Categorias' : 'Indicadores'} - {OPERATION_LABELS[indicator.operation!]}
-                        </span>
+                <React.Fragment key={indicator.id}>
+                  <tr className="border-b border-zinc-800 hover:bg-zinc-800/50">
+                    <td className="px-6 py-4">
+                      <span className="text-zinc-400 font-mono">{indicator.code}</span>
+                    </td>
+                    <td className="px-6 py-4 text-zinc-100">{indicator.name}</td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 rounded-full text-xs ${
+                        indicator.type === 'manual'
+                          ? 'bg-blue-500/20 text-blue-400'
+                          : 'bg-green-500/20 text-green-400'
+                      }`}>
+                        {indicator.type === 'manual' ? 'Manual' : 'Calculado'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-zinc-400">
+                      {indicator.type === 'calculated' && (
+                        <div className="flex items-center gap-2">
+                          <Calculator size={16} className="text-zinc-500" />
+                          <span>
+                            {indicator.calculation_type === 'category' ? 'Categorias' : 'Indicadores'} - {OPERATION_LABELS[indicator.operation!]}
+                          </span>
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setEditingIndicator(indicator)}
+                          className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
+                        >
+                          <PencilIcon size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteIndicator(indicator.id)}
+                          className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400 hover:text-red-400"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => toggleIndicatorStatus(indicator.id)}
-                        className={`p-2 hover:bg-zinc-700 rounded-lg transition-colors ${
-                          indicator.is_active ? 'text-green-400' : 'text-red-400'
-                        }`}
-                      >
-                        <Power size={16} />
-                      </button>
-                      <button
-                        onClick={() => setEditingIndicator(indicator)}
-                        className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
-                      >
-                        <PencilIcon size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteIndicator(indicator.id)}
-                        className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400 hover:text-red-400"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+                  </tr>
+                  <tr className="border-b border-zinc-800 bg-zinc-800/25">
+                    <td colSpan={5} className="px-6 py-2">
+                      <div className="flex flex-wrap gap-2">
+                        {companies.map(company => (
+                          <button
+                            key={company.id}
+                            onClick={() => handleToggleIndicatorStatus(indicator.id, company.id)}
+                            className={`px-2 py-1 rounded text-xs ${
+                              getIndicatorStatus(indicator.id, company.id)
+                                ? 'bg-green-500/20 text-green-400'
+                                : 'bg-zinc-700 text-zinc-400'
+                            }`}
+                          >
+                            {company.trading_name}
+                          </button>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                </React.Fragment>
               ))}
             </tbody>
           </table>
@@ -516,36 +598,34 @@ export const Indicators = () => {
                     </label>
                     <div className="space-y-2 max-h-48 overflow-y-auto">
                       {(editingIndicator?.calculation_type === 'category' || newIndicator.calculation_type === 'category')
-                        ? categories
-                            .filter(c => c.company_id === selectedCompanyId)
-                            .map(category => (
-                              <label key={category.id} className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  checked={editingIndicator
-                                    ? editingIndicator.source_ids.includes(category.id)
-                                    : newIndicator.source_ids.includes(category.id)}
-                                  onChange={(e) => {
-                                    const newSourceIds = e.target.checked
-                                      ? [...(editingIndicator ? editingIndicator.source_ids : newIndicator.source_ids), category.id]
-                                      : (editingIndicator ? editingIndicator.source_ids : newIndicator.source_ids)
-                                          .filter(id => id !== category.id);
-                                    
-                                    if (editingIndicator) {
-                                      setEditingIndicator({ ...editingIndicator, source_ids: newSourceIds });
-                                    } else {
-                                      setNewIndicator({ ...newIndicator, source_ids: newSourceIds });
-                                    }
-                                  }}
-                                  className="text-blue-600 rounded"
-                                />
-                                <span className="text-zinc-300">
-                                  {category.code} - {category.name}
-                                </span>
-                              </label>
-                            ))
+                        ? categories.map(category => (
+                            <label key={category.id} className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={editingIndicator
+                                  ? editingIndicator.source_ids.includes(category.id)
+                                  : newIndicator.source_ids.includes(category.id)}
+                                onChange={(e) => {
+                                  const newSourceIds = e.target.checked
+                                    ? [...(editingIndicator ? editingIndicator.source_ids : newIndicator.source_ids), category.id]
+                                    : (editingIndicator ? editingIndicator.source_ids : newIndicator.source_ids)
+                                        .filter(id => id !== category.id);
+                                  
+                                  if (editingIndicator) {
+                                    setEditingIndicator({ ...editingIndicator, source_ids: newSourceIds });
+                                  } else {
+                                    setNewIndicator({ ...newIndicator, source_ids: newSourceIds });
+                                  }
+                                }}
+                                className="text-blue-600 rounded"
+                              />
+                              <span className="text-zinc-300">
+                                {category.code} - {category.name}
+                              </span>
+                            </label>
+                          ))
                         : indicators
-                            .filter(i => i.company_id === selectedCompanyId && i.id !== editingIndicator?.id)
+                            .filter(i => i.id !== editingIndicator?.id)
                             .map(indicator => (
                               <label key={indicator.id} className="flex items-center gap-2">
                                 <input
