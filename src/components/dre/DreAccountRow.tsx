@@ -1,0 +1,97 @@
+import React from 'react';
+import { Plus, Minus, Equal, Power, PencilIcon, ArrowUp, ArrowDown, ChevronDown, ChevronRight } from 'lucide-react';
+import { DreAccount } from '../../types/dre';
+
+interface DreAccountRowProps {
+  account: DreAccount;
+  level: number;
+  onToggleExpansion: (accountId: string) => void;
+  onToggleStatus: (accountId: string) => void;
+  onStartEditing: (account: DreAccount) => void;
+  onMoveAccount: (accountId: string, direction: 'up' | 'down') => void;
+  childAccounts: DreAccount[];
+}
+
+export const DreAccountRow = ({
+  account,
+  level,
+  onToggleExpansion,
+  onToggleStatus,
+  onStartEditing,
+  onMoveAccount,
+  childAccounts
+}: DreAccountRowProps) => {
+  const hasChildren = childAccounts.length > 0;
+
+  return (
+    <React.Fragment>
+      <tr className={`border-b border-zinc-800 hover:bg-zinc-800/50 ${!account.isActive && 'opacity-50'}`}>
+        <td className="px-6 py-4">
+          <div className="flex items-center" style={{ paddingLeft: `${level * 20}px` }}>
+            {hasChildren ? (
+              <button
+                onClick={() => onToggleExpansion(account.id)}
+                className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
+              >
+                {account.isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              </button>
+            ) : (
+              <span className="w-6" />
+            )}
+            <span className="text-zinc-400 font-mono">{account.code}</span>
+          </div>
+        </td>
+        <td className="px-6 py-4">
+          <div className="flex items-center gap-2">
+            {account.type === 'revenue' && <Plus size={16} className="text-green-400" />}
+            {account.type === 'expense' && <Minus size={16} className="text-red-400" />}
+            {account.type === 'total' && <Equal size={16} className="text-blue-400" />}
+            <span className="text-zinc-100">{account.name}</span>
+          </div>
+        </td>
+        <td className="px-6 py-4 text-right">
+          <div className="flex items-center justify-end gap-2">
+            <button
+              onClick={() => onToggleStatus(account.id)}
+              className={`p-1 hover:bg-zinc-700 rounded-lg transition-colors ${
+                account.isActive ? 'text-green-400' : 'text-red-400'
+              }`}
+            >
+              <Power size={16} />
+            </button>
+            <button
+              onClick={() => onStartEditing(account)}
+              className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
+            >
+              <PencilIcon size={16} />
+            </button>
+            <button
+              onClick={() => onMoveAccount(account.id, 'up')}
+              className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
+            >
+              <ArrowUp size={16} />
+            </button>
+            <button
+              onClick={() => onMoveAccount(account.id, 'down')}
+              className="p-1 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
+            >
+              <ArrowDown size={16} />
+            </button>
+          </div>
+        </td>
+      </tr>
+      {account.isExpanded && childAccounts.map(childAccount => (
+        <DreAccountRow
+          key={childAccount.id}
+          account={childAccount}
+          level={level + 1}
+          onToggleExpansion={onToggleExpansion}
+          onToggleStatus={onToggleStatus}
+          onStartEditing={onStartEditing}
+          onMoveAccount={onMoveAccount}
+          childAccounts={[]} // Você precisará implementar a lógica para buscar os filhos do filho
+        />
+      ))}
+    </React.Fragment>
+  );
+};
