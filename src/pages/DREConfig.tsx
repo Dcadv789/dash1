@@ -1,48 +1,49 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Copy, Trash2 } from 'lucide-react';
+import { Plus, Copy } from 'lucide-react';
 import { DREConfigAccountRow } from '../components/DREConfig/DREConfigAccountRow';
 import { DREConfigAccountModal } from '../components/DREConfig/DREConfigAccountModal';
-import { useDREConfigAccounts } from '../hooks/useDREConfigAccounts';
+import { DREConfigCopyModal } from '../components/DREConfig/DREConfigCopyModal';
 import { Company } from '../types/company';
 import { Category, Indicator } from '../types/financial';
 import { DREConfigAccount } from '../types/DREConfig';
 import { supabase } from '../lib/supabase';
 
-type AccountType = 'all' | 'revenue' | 'expense' | 'flex' | 'total';
+type AccountType = 'all' | 'revenue' | 'expense' | 'total' | 'flex';
 
 const TYPE_LABELS = {
   all: 'Todos',
   revenue: 'Receita',
   expense: 'Despesa',
-  flex: 'Flex',
-  total: 'Totalizador'
+  total: 'Totalizador',
+  flex: 'Flexível'
 };
 
 export const DREConfig = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
+  const [accounts, setAccounts] = useState<DREConfigAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [selectedType, setSelectedType] = useState<AccountType>('all');
   const [showNewAccountModal, setShowNewAccountModal] = useState(false);
+  const [showCopyModal, setShowCopyModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<DREConfigAccount | null>(null);
-  const [categories] = useState<Category[]>(() => []);
-  const [indicators] = useState<Indicator[]>(() => []);
-  const [accountCompanies, setAccountCompanies] = useState<{[key: string]: string[]}>({});
-
-  const {
-    accounts,
-    setAccounts,
-    getChildAccounts,
-    moveAccount,
-    toggleAccountStatus,
-    toggleAccountExpansion,
-    deleteAccount
-  } = useDREConfigAccounts(selectedCompanyId);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [indicators, setIndicators] = useState<Indicator[]>([]);
+  const [copyFromCompanyId, setCopyFromCompanyId] = useState('');
+  const [copyToCompanyId, setCopyToCompanyId] = useState('');
 
   useEffect(() => {
     fetchCompanies();
+    fetchCategories();
+    fetchIndicators();
   }, []);
+
+  useEffect(() => {
+    if (selectedCompanyId) {
+      fetchAccounts();
+    }
+  }, [selectedCompanyId]);
 
   const fetchCompanies = async () => {
     try {
@@ -62,47 +63,203 @@ export const DREConfig = () => {
     }
   };
 
-  const handleSaveAccount = (account: DREConfigAccount) => {
-    if (editingAccount) {
-      setAccounts(accounts.map(acc => 
-        acc.id === account.id ? account : acc
-      ));
-    } else {
-      setAccounts([...accounts, account]);
-    }
-    setShowNewAccountModal(false);
-    setEditingAccount(null);
-  };
+  const fetchCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('code');
 
-  const handleDeleteAccount = (accountId: string) => {
-    if (window.confirm('Tem certeza que deseja excluir esta conta?')) {
-      deleteAccount(accountId);
+      if (error) throw error;
+      setCategories(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar categorias:', err);
+      setError('Erro ao carregar categorias');
     }
   };
 
-  const toggleCompanyForAccount = (accountId: string, companyId: string) => {
-    setAccountCompanies(prev => {
-      const companies = prev[accountId] || [];
-      const newCompanies = companies.includes(companyId)
-        ? companies.filter(id => id !== companyId)
-        : [...companies, companyId];
-      
-      return {
-        ...prev,
-        [accountId]: newCompanies
+  const fetchIndicators = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('indicators')
+        .select('*')
+        .order('code');
+
+      if (error) throw error;
+      setIndicators(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar indicadores:', err);
+      setError('Erro ao carregar indicadores');
+    }
+  };
+
+  const fetchAccounts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('dre_config_accounts')
+        .select('*')
+        .eq('company_id', selectedCompanyId)
+        .order('display_order');
+
+      if (error) throw error;
+      setAccounts(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar contas:', err);
+      setError('Erro ao carregar contas');
+    }
+  };
+
+  const handleSaveAccount = async (account: DREConfigAccount) => {
+    try {
+      const accountData = {
+        name: account.name,
+        type: account.type,
+        company_id: selectedCompanyId,
+        category_ids: account.categoryIds,
+        indicator_id: account.indicatorId,
+        selected_accounts: account.selectedAccounts,
+        parent_account_id: account.parentAccountId,
+        is_active: account.isActive,
+        sign: account.sign,
+        display_order: account.displayOrder
       };
-    });
+
+      if (editingAccount) {
+        const { error } = await supabase
+          .from('dre_config_accounts')
+          .update(accountData)
+          .eq('id', editingAccount.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('dre_config_accounts')
+          .insert([accountData]);
+
+        if (error) throw error;
+      }
+
+      setShowNewAccountModal(false);
+      setEditingAccount(null);
+      fetchAccounts();
+    } catch (err) {
+      console.error('Erro ao salvar conta:', err);
+      setError('Erro ao salvar conta');
+    }
   };
 
-  const isCompanySelectedForAccount = (accountId: string, companyId: string) => {
-    return (accountCompanies[accountId] || []).includes(companyId);
+  const handleDeleteAccount = async (accountId: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir esta conta?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('dre_config_accounts')
+        .delete()
+        .eq('id', accountId);
+
+      if (error) throw error;
+      fetchAccounts();
+    } catch (err) {
+      console.error('Erro ao excluir conta:', err);
+      setError('Erro ao excluir conta');
+    }
   };
 
-  const sortedAccounts = [...accounts]
-    .filter(acc => !selectedCompanyId || acc.companyId === selectedCompanyId)
-    .filter(acc => selectedType === 'all' || acc.type === selectedType)
-    .filter(acc => !acc.parentAccountId)
-    .sort((a, b) => a.displayOrder - b.displayOrder);
+  const handleCopyAccounts = async () => {
+    if (!copyFromCompanyId || !copyToCompanyId) return;
+
+    try {
+      const { data: sourceAccounts, error: fetchError } = await supabase
+        .from('dre_config_accounts')
+        .select('*')
+        .eq('company_id', copyFromCompanyId);
+
+      if (fetchError) throw fetchError;
+
+      if (sourceAccounts) {
+        const newAccounts = sourceAccounts.map(acc => ({
+          ...acc,
+          id: undefined,
+          company_id: copyToCompanyId,
+          created_at: undefined,
+          updated_at: undefined
+        }));
+
+        const { error: insertError } = await supabase
+          .from('dre_config_accounts')
+          .insert(newAccounts);
+
+        if (insertError) throw insertError;
+      }
+
+      setShowCopyModal(false);
+      setCopyFromCompanyId('');
+      setCopyToCompanyId('');
+      fetchAccounts();
+    } catch (err) {
+      console.error('Erro ao copiar contas:', err);
+      setError('Erro ao copiar contas');
+    }
+  };
+
+  const getChildAccounts = (accountId: string | null): DREConfigAccount[] => {
+    return accounts.filter(acc => acc.parentAccountId === accountId);
+  };
+
+  const handleMoveAccount = async (accountId: string, direction: 'up' | 'down') => {
+    const account = accounts.find(acc => acc.id === accountId);
+    if (!account) return;
+
+    const siblings = accounts.filter(acc => 
+      acc.parentAccountId === account.parentAccountId
+    ).sort((a, b) => a.displayOrder - b.displayOrder);
+
+    const currentIndex = siblings.findIndex(acc => acc.id === accountId);
+    
+    if (direction === 'up' && currentIndex > 0) {
+      const prevAccount = siblings[currentIndex - 1];
+      await updateAccountOrder(account, prevAccount.displayOrder);
+      await updateAccountOrder(prevAccount, account.displayOrder);
+    } else if (direction === 'down' && currentIndex < siblings.length - 1) {
+      const nextAccount = siblings[currentIndex + 1];
+      await updateAccountOrder(account, nextAccount.displayOrder);
+      await updateAccountOrder(nextAccount, account.displayOrder);
+    }
+
+    fetchAccounts();
+  };
+
+  const updateAccountOrder = async (account: DREConfigAccount, newOrder: number) => {
+    try {
+      const { error } = await supabase
+        .from('dre_config_accounts')
+        .update({ display_order: newOrder })
+        .eq('id', account.id);
+
+      if (error) throw error;
+    } catch (err) {
+      console.error('Erro ao atualizar ordem:', err);
+      setError('Erro ao atualizar ordem das contas');
+    }
+  };
+
+  const toggleAccountStatus = async (accountId: string) => {
+    const account = accounts.find(acc => acc.id === accountId);
+    if (!account) return;
+
+    try {
+      const { error } = await supabase
+        .from('dre_config_accounts')
+        .update({ is_active: !account.isActive })
+        .eq('id', accountId);
+
+      if (error) throw error;
+      fetchAccounts();
+    } catch (err) {
+      console.error('Erro ao atualizar status:', err);
+      setError('Erro ao atualizar status da conta');
+    }
+  };
 
   if (loading) {
     return (
@@ -121,13 +278,22 @@ export const DREConfig = () => {
           <h1 className="text-2xl font-bold text-zinc-100">DRE Config</h1>
           <p className="text-zinc-400 mt-1">Configuração do Demonstrativo de Resultados</p>
         </div>
-        <button
-          onClick={() => setShowNewAccountModal(true)}
-          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-white flex items-center gap-3"
-        >
-          <Plus size={20} />
-          Nova Conta
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowNewAccountModal(true)}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white flex items-center gap-2"
+          >
+            <Plus size={20} />
+            Nova Conta
+          </button>
+          <button
+            onClick={() => setShowCopyModal(true)}
+            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 flex items-center gap-2"
+          >
+            <Copy size={20} />
+            Copiar DRE
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -191,39 +357,27 @@ export const DREConfig = () => {
               </tr>
             </thead>
             <tbody>
-              {sortedAccounts.map(account => (
-                <React.Fragment key={account.id}>
+              {accounts
+                .filter(acc => !acc.parentAccountId)
+                .filter(acc => selectedType === 'all' || acc.type === selectedType)
+                .sort((a, b) => a.displayOrder - b.displayOrder)
+                .map(account => (
                   <DREConfigAccountRow
+                    key={account.id}
                     account={account}
                     level={0}
-                    onToggleExpansion={toggleAccountExpansion}
+                    onToggleExpansion={(id) => {
+                      setAccounts(accounts.map(acc =>
+                        acc.id === id ? { ...acc, isExpanded: !acc.isExpanded } : acc
+                      ));
+                    }}
                     onToggleStatus={toggleAccountStatus}
                     onStartEditing={setEditingAccount}
-                    onMoveAccount={moveAccount}
+                    onMoveAccount={handleMoveAccount}
                     onDelete={handleDeleteAccount}
                     childAccounts={getChildAccounts(account.id)}
                   />
-                  <tr>
-                    <td colSpan={4} className="px-6 py-2 border-b border-zinc-800">
-                      <div className="flex flex-wrap gap-2">
-                        {companies.map(company => (
-                          <button
-                            key={company.id}
-                            onClick={() => toggleCompanyForAccount(account.id, company.id)}
-                            className={`px-2 py-1 rounded text-xs transition-colors ${
-                              isCompanySelectedForAccount(account.id, company.id)
-                                ? 'bg-green-500/20 text-green-400'
-                                : 'bg-zinc-700/50 text-zinc-400'
-                            }`}
-                          >
-                            {company.trading_name}
-                          </button>
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                </React.Fragment>
-              ))}
+                ))}
             </tbody>
           </table>
         </div>
@@ -240,7 +394,20 @@ export const DREConfig = () => {
         selectedCompanyId={selectedCompanyId}
         categories={categories}
         indicators={indicators}
-        parentAccounts={[]}
+        parentAccounts={accounts.filter(acc => 
+          acc.type === 'total' || acc.type === 'flex'
+        )}
+      />
+
+      <DREConfigCopyModal
+        isOpen={showCopyModal}
+        onClose={() => setShowCopyModal(false)}
+        companies={companies}
+        copyFromCompanyId={copyFromCompanyId}
+        copyToCompanyId={copyToCompanyId}
+        onCopyFromChange={setCopyFromCompanyId}
+        onCopyToChange={setCopyToCompanyId}
+        onCopy={handleCopyAccounts}
       />
     </div>
   );
