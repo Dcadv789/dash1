@@ -2,29 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { X, Check, Plus, Minus, Equal } from 'lucide-react';
 import { DREConfigAccount } from '../../types/DREConfig';
 import { Category, Indicator } from '../../types/financial';
+import { Company } from '../../types/company';
+import { supabase } from '../../lib/supabase';
 
 interface DREConfigAccountModalProps {
   isOpen: boolean;
   onClose: () => void;
   editingAccount: DREConfigAccount | null;
   onSave: (account: DREConfigAccount) => void;
-  selectedCompanyId: string;
   categories: Category[];
   indicators: Indicator[];
   parentAccounts: DREConfigAccount[];
 }
-
-const loadFromStorage = (key: string, defaultValue: any) => {
-  const stored = localStorage.getItem(key);
-  return stored ? JSON.parse(stored) : defaultValue;
-};
 
 export const DREConfigAccountModal = ({
   isOpen,
   onClose,
   editingAccount,
   onSave,
-  selectedCompanyId,
   categories,
   indicators,
   parentAccounts
@@ -39,6 +34,12 @@ export const DREConfigAccountModal = ({
   const [categorySearch, setCategorySearch] = useState('');
   const [indicatorSearch, setIndicatorSearch] = useState('');
   const [blankAccountSign, setBlankAccountSign] = useState<'positive' | 'negative'>('positive');
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetchCompanies();
+  }, []);
 
   useEffect(() => {
     if (editingAccount) {
@@ -50,10 +51,44 @@ export const DREConfigAccountModal = ({
       setSelectedAccounts(editingAccount.selectedAccounts || []);
       setSelectedParentAccount(editingAccount.parentAccountId || null);
       setBlankAccountSign(editingAccount.sign || 'positive');
+      
+      if (editingAccount.id) {
+        fetchSelectedCompanies(editingAccount.id);
+      }
     } else {
       resetForm();
     }
   }, [editingAccount]);
+
+  const fetchCompanies = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('companies')
+        .select('id, trading_name, name')
+        .eq('is_active', true)
+        .order('trading_name');
+
+      if (error) throw error;
+      setCompanies(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar empresas:', err);
+    }
+  };
+
+  const fetchSelectedCompanies = async (accountId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('dre_config_account_companies')
+        .select('company_id')
+        .eq('account_id', accountId)
+        .eq('is_active', true);
+
+      if (error) throw error;
+      setSelectedCompanies(data.map(item => item.company_id));
+    } catch (err) {
+      console.error('Erro ao carregar empresas selecionadas:', err);
+    }
+  };
 
   const resetForm = () => {
     setAccountType('category');
@@ -66,37 +101,81 @@ export const DREConfigAccountModal = ({
     setCategorySearch('');
     setIndicatorSearch('');
     setBlankAccountSign('positive');
+    setSelectedCompanies([]);
   };
 
-  const handleSave = () => {
-    const maxOrder = Math.max(...loadFromStorage('dreconfig_accounts', [])
-      .filter((acc: DREConfigAccount) => acc.parentAccountId === selectedParentAccount)
-      .map((acc: DREConfigAccount) => acc.displayOrder), 0);
+  const handleSave = async () => {
+    try {
+      const accountData = {
+        name: accountName,
+        type: accountType === 'category' ? categoryType : accountType,
+        category_ids: accountType === 'category' ? selectedCategories : null,
+        indicator_id: accountType === 'indicator' ? selectedIndicator : null,
+        selected_accounts: accountType === 'total' ? selectedAccounts : null,
+        parent_account_id: selectedParentAccount,
+        is_active: true,
+        sign: accountType === 'flex' ? blankAccountSign : null
+      };
 
-    const newAccount: DREConfigAccount = {
-      id: editingAccount?.id || Math.random().toString(36).substr(2, 9),
-      code: editingAccount?.code || `A${(Math.random() * 1000).toFixed(0).padStart(3, '0')}`,
-      name: accountName,
-      type: accountType === 'category' ? categoryType : accountType,
-      displayOrder: editingAccount?.displayOrder || maxOrder + 1,
-      companyId: selectedCompanyId,
-      isActive: true,
-      parentAccountId: selectedParentAccount,
-      categoryIds: accountType === 'category' ? selectedCategories : undefined,
-      indicatorId: accountType === 'indicator' ? selectedIndicator : undefined,
-      selectedAccounts: accountType === 'total' ? selectedAccounts : undefined,
-      sign: accountType === 'flex' ? blankAccountSign : undefined
-    };
+      let accountId;
+      if (editingAccount) {
+        const { data, error } = await supabase
+          .from('dre_config_accounts')
+          .update(accountData)
+          .eq('id', editingAccount.id)
+          .select()
+          .single();
 
-    onSave(newAccount);
-    resetForm();
+        if (error) throw error;
+        accountId = editingAccount.id;
+      } else {
+        const { data, error } = await supabase
+          .from('dre_config_accounts')
+          .insert([accountData])
+          .select()
+          .single();
+
+        if (error) throw error;
+        accountId = data.id;
+      }
+
+      // Atualizar relações com empresas
+      if (accountId) {
+        // Primeiro, remove todas as relações existentes
+        await supabase
+          .from('dre_config_account_companies')
+          .delete()
+          .eq('account_id', accountId);
+
+        // Depois, insere as novas relações
+        if (selectedCompanies.length > 0) {
+          const companyRelations = selectedCompanies.map(companyId => ({
+            account_id: accountId,
+            company_id: companyId,
+            is_active: true
+          }));
+
+          const { error } = await supabase
+            .from('dre_config_account_companies')
+            .insert(companyRelations);
+
+          if (error) throw error;
+        }
+      }
+
+      onClose();
+      resetForm();
+      window.location.reload(); // Recarrega a página para atualizar os dados
+    } catch (err) {
+      console.error('Erro ao salvar conta:', err);
+    }
   };
 
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-2xl">
+      <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-lg font-semibold text-zinc-100">
             {editingAccount ? 'Editar Conta' : 'Nova Conta'}
@@ -109,7 +188,7 @@ export const DREConfigAccountModal = ({
           </button>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div>
             <label className="block text-sm font-medium text-zinc-400 mb-2">
               Nome da Conta
@@ -121,24 +200,6 @@ export const DREConfigAccountModal = ({
               className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
               placeholder="Nome da conta"
             />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-2">
-              Conta Pai (Opcional)
-            </label>
-            <select
-              value={selectedParentAccount || ''}
-              onChange={(e) => setSelectedParentAccount(e.target.value || null)}
-              className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
-            >
-              <option value="">Nenhuma (Conta Principal)</option>
-              {parentAccounts.map(account => (
-                <option key={account.id} value={account.id}>
-                  {account.code} - {account.name}
-                </option>
-              ))}
-            </select>
           </div>
 
           <div>
@@ -226,7 +287,6 @@ export const DREConfigAccountModal = ({
                   {categories
                     .filter(c => 
                       c.type === categoryType &&
-                      c.companyId === selectedCompanyId &&
                       c.name.toLowerCase().includes(categorySearch.toLowerCase())
                     )
                     .map(category => (
@@ -266,7 +326,6 @@ export const DREConfigAccountModal = ({
               <div className="space-y-2 max-h-40 overflow-y-auto">
                 {indicators
                   .filter(i => 
-                    i.companyId === selectedCompanyId &&
                     i.name.toLowerCase().includes(indicatorSearch.toLowerCase())
                   )
                   .map(indicator => (
@@ -290,13 +349,12 @@ export const DREConfigAccountModal = ({
                 Contas para Totalizar
               </label>
               <div className="space-y-2 max-h-40 overflow-y-auto">
-                {loadFromStorage('dreconfig_accounts', [])
-                  .filter((acc: DREConfigAccount) => 
-                    acc.companyId === selectedCompanyId && 
+                {parentAccounts
+                  .filter(acc => 
                     acc.type !== 'total' &&
                     acc.type !== 'flex'
                   )
-                  .map((account: DREConfigAccount) => (
+                  .map(account => (
                     <label key={account.id} className="flex items-center gap-2 p-2 hover:bg-zinc-800 rounded-lg">
                       <input
                         type="checkbox"
@@ -344,22 +402,65 @@ export const DREConfigAccountModal = ({
               </div>
             </div>
           )}
-        </div>
 
-        <div className="flex justify-end gap-2 mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={!accountName || (accountType === 'category' && selectedCategories.length === 0) || (accountType === 'indicator' && !selectedIndicator) || (accountType === 'total' && selectedAccounts.length === 0)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {editingAccount ? 'Salvar' : 'Adicionar'}
-          </button>
+          <div>
+            <label className="block text-sm font-medium text-zinc-400 mb-2">
+              Conta Pai (Opcional)
+            </label>
+            <select
+              value={selectedParentAccount || ''}
+              onChange={(e) => setSelectedParentAccount(e.target.value || null)}
+              className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+            >
+              <option value="">Nenhuma (Conta Principal)</option>
+              {parentAccounts.map(account => (
+                <option key={account.id} value={account.id}>
+                  {account.code} - {account.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-zinc-400 mb-2">
+              Empresas
+            </label>
+            <div className="space-y-2 max-h-40 overflow-y-auto p-2 bg-zinc-800/50 rounded-lg">
+              {companies.map(company => (
+                <label key={company.id} className="flex items-center gap-2 p-2 hover:bg-zinc-800 rounded-lg">
+                  <input
+                    type="checkbox"
+                    checked={selectedCompanies.includes(company.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedCompanies([...selectedCompanies, company.id]);
+                      } else {
+                        setSelectedCompanies(selectedCompanies.filter(id => id !== company.id));
+                      }
+                    }}
+                    className="text-blue-600"
+                  />
+                  <span className="text-zinc-300">{company.trading_name} - {company.name}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-6">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!accountName || (accountType === 'category' && selectedCategories.length === 0) || (accountType === 'indicator' && !selectedIndicator) || (accountType === 'total' && selectedAccounts.length === 0)}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {editingAccount ? 'Salvar' : 'Adicionar'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
