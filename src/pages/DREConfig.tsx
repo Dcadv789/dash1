@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { Plus, Copy } from 'lucide-react';
+import { Plus, Search, SlidersHorizontal } from 'lucide-react';
 import { DREConfigAccountRow } from '../components/DREConfig/DREConfigAccountRow';
 import { DREConfigAccountModal } from '../components/DREConfig/DREConfigAccountModal';
-import { DREConfigCopyModal } from '../components/DREConfig/DREConfigCopyModal';
 import { useDREConfigAccounts } from '../hooks/useDREConfigAccounts';
 import { Company } from '../types/company';
 import { Category, Indicator } from '../types/financial';
@@ -15,32 +14,7 @@ const loadFromStorage = (key: string, defaultValue: any) => {
 
 export const DREConfig = () => {
   const [companies] = useState<Company[]>(() => 
-    loadFromStorage('companies', [
-      {
-        id: 'COMP001',
-        name: 'TechCorp Solutions Ltda',
-        tradingName: 'TechCorp',
-        cnpj: '12.345.678/0001-90',
-        isActive: true,
-        maxDreLevel: 3
-      },
-      {
-        id: 'COMP002',
-        name: 'Inovação Digital S.A.',
-        tradingName: 'InovaTech',
-        cnpj: '23.456.789/0001-01',
-        isActive: true,
-        maxDreLevel: 3
-      },
-      {
-        id: 'COMP003',
-        name: 'Global Software Enterprise',
-        tradingName: 'GSE',
-        cnpj: '34.567.890/0001-12',
-        isActive: true,
-        maxDreLevel: 3
-      }
-    ])
+    loadFromStorage('companies', [])
   );
 
   const [categories] = useState<Category[]>(() => 
@@ -52,9 +26,6 @@ export const DREConfig = () => {
   );
 
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
-  const [showCopyModal, setShowCopyModal] = useState(false);
-  const [copyFromCompanyId, setCopyFromCompanyId] = useState<string>('');
-  const [copyToCompanyId, setCopyToCompanyId] = useState<string>('');
   const [showNewAccountModal, setShowNewAccountModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<DREConfigAccount | null>(null);
 
@@ -68,50 +39,17 @@ export const DREConfig = () => {
     deleteAccount
   } = useDREConfigAccounts(selectedCompanyId);
 
-  const handleCopyAccounts = () => {
-    if (!copyFromCompanyId || !copyToCompanyId) return;
-
-    const accountsToCopy = accounts.filter(acc => acc.companyId === copyFromCompanyId);
-    const copiedAccounts = accountsToCopy.map(acc => ({
-      ...acc,
-      id: Math.random().toString(36).substr(2, 9),
-      companyId: copyToCompanyId
-    }));
-
-    setAccounts([...accounts, ...copiedAccounts]);
-    setShowCopyModal(false);
-    setCopyFromCompanyId('');
-    setCopyToCompanyId('');
-  };
-
-  const updateCompanyMaxLevel = (companyId: string, maxLevel: number) => {
-    companies.forEach(company => {
-      if (company.id === companyId) {
-        company.maxDreLevel = maxLevel;
-      }
-    });
-  };
-
   const getAvailableParentAccounts = (currentAccountId?: string): DREConfigAccount[] => {
     const selectedCompany = companies.find(c => c.id === selectedCompanyId);
     if (!selectedCompany) return [];
 
     const availableAccounts = accounts.filter(acc => {
-      // Filtra apenas contas da empresa selecionada
       if (acc.companyId !== selectedCompanyId) return false;
-      
-      // Filtra apenas contas do tipo totalizador ou em branco
       if (acc.type !== 'total' && acc.type !== 'blank') return false;
-      
-      // Não permite selecionar a própria conta como pai
       if (acc.id === currentAccountId) return false;
-      
-      // Não permite selecionar descendentes da conta atual como pai
       if (isDescendant(acc.id, currentAccountId)) return false;
-
-      // Verifica o nível máximo permitido
       const level = getAccountLevel(acc.id);
-      return level < (selectedCompany.maxDreLevel - 1);
+      return level < ((selectedCompany.maxDreLevel || 3) - 1);
     });
 
     return availableAccounts;
@@ -119,19 +57,15 @@ export const DREConfig = () => {
 
   const getAccountLevel = (accountId: string | null): number => {
     if (!accountId) return 0;
-    
     const account = accounts.find(acc => acc.id === accountId);
     if (!account) return 0;
-    
     return 1 + getAccountLevel(account.parentAccountId);
   };
 
   const isDescendant = (potentialParentId: string, accountId?: string): boolean => {
     if (!accountId) return false;
-    
     const account = accounts.find(acc => acc.id === accountId);
     if (!account) return false;
-    
     if (account.parentAccountId === potentialParentId) return true;
     return isDescendant(potentialParentId, account.parentAccountId);
   };
@@ -160,74 +94,40 @@ export const DREConfig = () => {
 
   return (
     <div className="max-w-6xl mx-auto py-8">
-      {/* Cabeçalho */}
+      <div className="flex justify-between items-center mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-100">DRE Config</h1>
+          <p className="text-zinc-400 mt-1">Configuração do Demonstrativo de Resultados</p>
+        </div>
+        <button
+          onClick={() => setShowNewAccountModal(true)}
+          className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-white flex items-center gap-3"
+        >
+          <Plus size={20} />
+          Nova Conta
+        </button>
+      </div>
+
       <div className="bg-zinc-900 rounded-xl p-8 mb-8">
-        <div className="flex flex-col gap-8">
-          <div className="flex justify-between items-start">
-            <div>
-              <h1 className="text-2xl font-bold text-zinc-100">DREConfig</h1>
-              <p className="text-zinc-400 mt-2">Demonstrativo de Resultados</p>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => setShowNewAccountModal(true)}
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-white flex items-center gap-3"
-              >
-                <Plus size={20} />
-                Nova Conta
-              </button>
-
-              <button
-                onClick={() => setShowCopyModal(true)}
-                className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300 flex items-center gap-3"
-              >
-                <Copy size={20} />
-                Copiar DREConfig
-              </button>
-            </div>
-          </div>
-
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="md:w-96">
-              <label className="block text-sm font-medium text-zinc-400 mb-2">
-                Empresa
-              </label>
-              <select
-                value={selectedCompanyId}
-                onChange={(e) => setSelectedCompanyId(e.target.value)}
-                className="bg-zinc-800 text-zinc-100 rounded-lg px-4 py-3 w-full appearance-none pr-10"
-              >
-                <option value="">Selecione uma empresa</option>
-                {companies.filter(c => c.isActive).map(company => (
-                  <option key={company.id} value={company.id}>
-                    {company.tradingName} - {company.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {selectedCompanyId && (
-              <div className="md:w-64">
-                <label className="block text-sm font-medium text-zinc-400 mb-2">
-                  Níveis Máximos do DREConfig
-                </label>
-                <select
-                  value={companies.find(c => c.id === selectedCompanyId)?.maxDreLevel || 3}
-                  onChange={(e) => updateCompanyMaxLevel(selectedCompanyId, Number(e.target.value))}
-                  className="bg-zinc-800 text-zinc-100 rounded-lg px-4 py-3 w-full appearance-none pr-10"
-                >
-                  <option value={3}>3 Níveis</option>
-                  <option value={4}>4 Níveis</option>
-                  <option value={5}>5 Níveis</option>
-                </select>
-              </div>
-            )}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal size={20} className="text-zinc-400" />
+            <select
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 min-w-[200px] appearance-none"
+            >
+              <option value="">Selecione uma empresa</option>
+              {companies.filter(c => c.isActive).map(company => (
+                <option key={company.id} value={company.id}>
+                  {company.tradingName}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
 
-      {/* Conteúdo Principal */}
       {selectedCompanyId ? (
         <div className="bg-zinc-900 rounded-xl p-6">
           <div className="overflow-x-auto">
@@ -260,11 +160,10 @@ export const DREConfig = () => {
         </div>
       ) : (
         <div className="bg-zinc-900 rounded-xl p-8 text-center">
-          <p className="text-zinc-400">Selecione uma empresa para visualizar o DREConfig</p>
+          <p className="text-zinc-400">Selecione uma empresa para visualizar o DRE</p>
         </div>
       )}
 
-      {/* Modais */}
       <DREConfigAccountModal
         isOpen={showNewAccountModal || editingAccount !== null}
         onClose={() => {
@@ -277,17 +176,6 @@ export const DREConfig = () => {
         categories={categories}
         indicators={indicators}
         parentAccounts={getAvailableParentAccounts(editingAccount?.id)}
-      />
-
-      <DREConfigCopyModal
-        isOpen={showCopyModal}
-        onClose={() => setShowCopyModal(false)}
-        companies={companies}
-        copyFromCompanyId={copyFromCompanyId}
-        copyToCompanyId={copyToCompanyId}
-        onCopyFromChange={setCopyFromCompanyId}
-        onCopyToChange={setCopyToCompanyId}
-        onCopy={handleCopyAccounts}
       />
     </div>
   );

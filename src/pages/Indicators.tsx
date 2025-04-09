@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Copy, PencilIcon, Save, Check, X, Calculator, Power, Trash2, Search, SlidersHorizontal } from 'lucide-react';
+import { Plus, Search, SlidersHorizontal, Calculator, Edit, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Category, Indicator } from '../types/financial';
 
@@ -27,28 +27,16 @@ const OPERATION_LABELS = {
 export const Indicators = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [indicators, setIndicators] = useState<Indicator[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [companyIndicators, setCompanyIndicators] = useState<CompanyIndicator[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNewIndicatorModal, setShowNewIndicatorModal] = useState(false);
-  const [editingIndicator, setEditingIndicator] = useState<Indicator | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<'all' | 'manual' | 'calculated'>('all');
 
-  // Form state
-  const [newIndicator, setNewIndicator] = useState({
-    name: '',
-    type: 'manual' as const,
-    calculation_type: undefined as 'category' | 'indicator' | undefined,
-    operation: undefined as 'sum' | 'subtract' | 'multiply' | 'divide' | undefined,
-    source_ids: [] as string[]
-  });
-
   useEffect(() => {
     fetchCompanies();
-    fetchCategories();
     fetchIndicators();
     fetchCompanyIndicators();
   }, []);
@@ -66,21 +54,6 @@ export const Indicators = () => {
     } catch (err) {
       console.error('Erro ao carregar empresas:', err);
       setError('Erro ao carregar empresas');
-    }
-  };
-
-  const fetchCategories = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .order('code');
-
-      if (error) throw error;
-      setCategories(data || []);
-    } catch (err) {
-      console.error('Erro ao carregar categorias:', err);
-      setError('Erro ao carregar categorias');
     }
   };
 
@@ -115,57 +88,47 @@ export const Indicators = () => {
     }
   };
 
-  const handleCreateIndicator = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('indicators')
-        .insert([{
-          name: newIndicator.name,
-          type: newIndicator.type,
-          calculation_type: newIndicator.calculation_type,
-          operation: newIndicator.operation,
-          source_ids: newIndicator.source_ids,
-          is_active: true
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setIndicators([...indicators, data]);
-      setShowNewIndicatorModal(false);
-      resetNewIndicatorForm();
-    } catch (err) {
-      console.error('Erro ao criar indicador:', err);
-      setError('Erro ao criar indicador');
-    }
+  const getIndicatorStatus = (indicatorId: string, companyId: string): boolean => {
+    return companyIndicators.some(ci => 
+      ci.indicator_id === indicatorId && 
+      ci.company_id === companyId
+    );
   };
 
-  const handleUpdateIndicator = async () => {
-    if (!editingIndicator) return;
-
+  const handleToggleIndicatorStatus = async (indicatorId: string, companyId: string) => {
     try {
-      const { error } = await supabase
-        .from('indicators')
-        .update({
-          name: editingIndicator.name,
-          type: editingIndicator.type,
-          calculation_type: editingIndicator.calculation_type,
-          operation: editingIndicator.operation,
-          source_ids: editingIndicator.source_ids,
-          is_active: editingIndicator.is_active
-        })
-        .eq('id', editingIndicator.id);
+      const existingLink = companyIndicators.find(
+        ci => ci.indicator_id === indicatorId && ci.company_id === companyId
+      );
 
-      if (error) throw error;
+      if (existingLink) {
+        const { error } = await supabase
+          .from('company_indicators')
+          .delete()
+          .eq('indicator_id', indicatorId)
+          .eq('company_id', companyId);
 
-      setIndicators(indicators.map(ind => 
-        ind.id === editingIndicator.id ? editingIndicator : ind
-      ));
-      setEditingIndicator(null);
+        if (error) throw error;
+        setCompanyIndicators(companyIndicators.filter(
+          ci => !(ci.indicator_id === indicatorId && ci.company_id === companyId)
+        ));
+      } else {
+        const { data, error } = await supabase
+          .from('company_indicators')
+          .insert([{
+            company_id: companyId,
+            indicator_id: indicatorId,
+            is_active: true
+          }])
+          .select()
+          .single();
+
+        if (error) throw error;
+        setCompanyIndicators([...companyIndicators, data]);
+      }
     } catch (err) {
-      console.error('Erro ao atualizar indicador:', err);
-      setError('Erro ao atualizar indicador');
+      console.error('Erro ao alterar status do indicador:', err);
+      setError('Erro ao alterar status do indicador');
     }
   };
 
@@ -186,62 +149,6 @@ export const Indicators = () => {
       console.error('Erro ao excluir indicador:', err);
       setError('Erro ao excluir indicador');
     }
-  };
-
-  const handleToggleIndicatorStatus = async (indicatorId: string, companyId: string) => {
-    try {
-      const existingLink = companyIndicators.find(
-        ci => ci.indicator_id === indicatorId && ci.company_id === companyId
-      );
-
-      if (existingLink) {
-        // Remove o vínculo
-        const { error } = await supabase
-          .from('company_indicators')
-          .delete()
-          .eq('indicator_id', indicatorId)
-          .eq('company_id', companyId);
-
-        if (error) throw error;
-        setCompanyIndicators(companyIndicators.filter(
-          ci => !(ci.indicator_id === indicatorId && ci.company_id === companyId)
-        ));
-      } else {
-        // Cria novo vínculo
-        const { data, error } = await supabase
-          .from('company_indicators')
-          .insert([{
-            company_id: companyId,
-            indicator_id: indicatorId,
-            is_active: true
-          }])
-          .select()
-          .single();
-
-        if (error) throw error;
-        setCompanyIndicators([...companyIndicators, data]);
-      }
-    } catch (err) {
-      console.error('Erro ao alterar status do indicador:', err);
-      setError('Erro ao alterar status do indicador');
-    }
-  };
-
-  const resetNewIndicatorForm = () => {
-    setNewIndicator({
-      name: '',
-      type: 'manual',
-      calculation_type: undefined,
-      operation: undefined,
-      source_ids: []
-    });
-  };
-
-  const getIndicatorStatus = (indicatorId: string, companyId: string): boolean => {
-    return companyIndicators.some(ci => 
-      ci.indicator_id === indicatorId && 
-      ci.company_id === companyId
-    );
   };
 
   const filteredIndicators = indicators.filter(indicator => {
@@ -312,7 +219,7 @@ export const Indicators = () => {
               <select
                 value={selectedCompanyId}
                 onChange={(e) => setSelectedCompanyId(e.target.value)}
-                className="px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 min-w-[200px]"
+                className="px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100 min-w-[200px] appearance-none"
               >
                 <option value="">Todas as empresas</option>
                 {companies.map(company => (
@@ -419,10 +326,10 @@ export const Indicators = () => {
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
                       <button
-                        onClick={() => setEditingIndicator(indicator)}
+                        onClick={() => setShowNewIndicatorModal(true)}
                         className="p-2 hover:bg-zinc-700 rounded-lg transition-colors text-zinc-400"
                       >
-                        <PencilIcon size={16} />
+                        <Edit size={16} />
                       </button>
                       <button
                         onClick={() => handleDeleteIndicator(indicator.id)}
@@ -438,288 +345,6 @@ export const Indicators = () => {
           </table>
         </div>
       </div>
-
-      {/* Modal de Novo/Editar Indicador */}
-      {(showNewIndicatorModal || editingIndicator) && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-zinc-100">
-                {editingIndicator ? 'Editar Indicador' : 'Novo Indicador'}
-              </h2>
-              <button
-                onClick={() => {
-                  setShowNewIndicatorModal(false);
-                  setEditingIndicator(null);
-                  resetNewIndicatorForm();
-                }}
-                className="text-zinc-400 hover:text-zinc-100"
-              >
-                <X size={24} />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-1">
-                  Nome do Indicador
-                </label>
-                <input
-                  type="text"
-                  value={editingIndicator ? editingIndicator.name : newIndicator.name}
-                  onChange={(e) => {
-                    if (editingIndicator) {
-                      setEditingIndicator({ ...editingIndicator, name: e.target.value });
-                    } else {
-                      setNewIndicator({ ...newIndicator, name: e.target.value });
-                    }
-                  }}
-                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
-                  placeholder="Ex: Margem de Lucro"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">
-                  Tipo de Indicador
-                </label>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      checked={editingIndicator ? editingIndicator.type === 'manual' : newIndicator.type === 'manual'}
-                      onChange={() => {
-                        if (editingIndicator) {
-                          setEditingIndicator({
-                            ...editingIndicator,
-                            type: 'manual',
-                            calculation_type: undefined,
-                            operation: undefined,
-                            source_ids: []
-                          });
-                        } else {
-                          setNewIndicator({
-                            ...newIndicator,
-                            type: 'manual',
-                            calculation_type: undefined,
-                            operation: undefined,
-                            source_ids: []
-                          });
-                        }
-                      }}
-                      className="text-blue-600"
-                    />
-                    <span className="text-zinc-300">Manual</span>
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="radio"
-                      checked={editingIndicator ? editingIndicator.type === 'calculated' : newIndicator.type === 'calculated'}
-                      onChange={() => {
-                        if (editingIndicator) {
-                          setEditingIndicator({
-                            ...editingIndicator,
-                            type: 'calculated',
-                            calculation_type: 'category',
-                            operation: 'sum',
-                            source_ids: []
-                          });
-                        } else {
-                          setNewIndicator({
-                            ...newIndicator,
-                            type: 'calculated',
-                            calculation_type: 'category',
-                            operation: 'sum',
-                            source_ids: []
-                          });
-                        }
-                      }}
-                      className="text-blue-600"
-                    />
-                    <span className="text-zinc-300">Calculado</span>
-                  </label>
-                </div>
-              </div>
-
-              {((editingIndicator && editingIndicator.type === 'calculated') || 
-                (!editingIndicator && newIndicator.type === 'calculated')) && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">
-                      Tipo de Cálculo
-                    </label>
-                    <div className="flex gap-4">
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          checked={editingIndicator 
-                            ? editingIndicator.calculation_type === 'category'
-                            : newIndicator.calculation_type === 'category'}
-                          onChange={() => {
-                            if (editingIndicator) {
-                              setEditingIndicator({
-                                ...editingIndicator,
-                                calculation_type: 'category',
-                                source_ids: []
-                              });
-                            } else {
-                              setNewIndicator({
-                                ...newIndicator,
-                                calculation_type: 'category',
-                                source_ids: []
-                              });
-                            }
-                          }}
-                          className="text-blue-600"
-                        />
-                        <span className="text-zinc-300">Categorias</span>
-                      </label>
-                      <label className="flex items-center gap-2">
-                        <input
-                          type="radio"
-                          checked={editingIndicator
-                            ? editingIndicator.calculation_type === 'indicator'
-                            : newIndicator.calculation_type === 'indicator'}
-                          onChange={() => {
-                            if (editingIndicator) {
-                              setEditingIndicator({
-                                ...editingIndicator,
-                                calculation_type: 'indicator',
-                                source_ids: []
-                              });
-                            } else {
-                              setNewIndicator({
-                                ...newIndicator,
-                                calculation_type: 'indicator',
-                                source_ids: []
-                              });
-                            }
-                          }}
-                          className="text-blue-600"
-                        />
-                        <span className="text-zinc-300">Indicadores</span>
-                      </label>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">
-                      Operação
-                    </label>
-                    <select
-                      value={editingIndicator ? editingIndicator.operation : newIndicator.operation}
-                      onChange={(e) => {
-                        const value = e.target.value as 'sum' | 'subtract' | 'multiply' | 'divide';
-                        if (editingIndicator) {
-                          setEditingIndicator({ ...editingIndicator, operation: value });
-                        } else {
-                          setNewIndicator({ ...newIndicator, operation: value });
-                        }
-                      }}
-                      className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
-                    >
-                      {Object.entries(OPERATION_LABELS).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-2">
-                      {editingIndicator?.calculation_type === 'category' || newIndicator.calculation_type === 'category'
-                        ? 'Selecione as Categorias'
-                        : 'Selecione os Indicadores'}
-                    </label>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {(editingIndicator?.calculation_type === 'category' || newIndicator.calculation_type === 'category')
-                        ? categories.map(category => (
-                            <label key={category.id} className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={editingIndicator
-                                  ? editingIndicator.source_ids.includes(category.id)
-                                  : newIndicator.source_ids.includes(category.id)}
-                                onChange={(e) => {
-                                  const newSourceIds = e.target.checked
-                                    ? [...(editingIndicator ? editingIndicator.source_ids : newIndicator.source_ids), category.id]
-                                    : (editingIndicator ? editingIndicator.source_ids : newIndicator.source_ids)
-                                        .filter(id => id !== category.id);
-                                  
-                                  if (editingIndicator) {
-                                    setEditingIndicator({ ...editingIndicator, source_ids: newSourceIds });
-                                  } else {
-                                    setNewIndicator({ ...newIndicator, source_ids: newSourceIds });
-                                  }
-                                }}
-                                className="text-blue-600 rounded"
-                              />
-                              <span className="text-zinc-300">
-                                {category.code} - {category.name}
-                              </span>
-                            </label>
-                          ))
-                        : indicators
-                            .filter(i => i.id !== editingIndicator?.id)
-                            .map(indicator => (
-                              <label key={indicator.id} className="flex items-center gap-2">
-                                <input
-                                  type="checkbox"
-                                  checked={editingIndicator
-                                    ? editingIndicator.source_ids.includes(indicator.id)
-                                    : newIndicator.source_ids.includes(indicator.id)}
-                                  onChange={(e) => {
-                                    const newSourceIds = e.target.checked
-                                      ? [...(editingIndicator ? editingIndicator.source_ids : newIndicator.source_ids), indicator.id]
-                                      : (editingIndicator ? editingIndicator.source_ids : newIndicator.source_ids)
-                                          .filter(id => id !== indicator.id);
-                                    
-                                    if (editingIndicator) {
-                                      setEditingIndicator({ ...editingIndicator, source_ids: newSourceIds });
-                                    } else {
-                                      setNewIndicator({ ...newIndicator, source_ids: newSourceIds });
-                                    }
-                                  }}
-                                  className="text-blue-600 rounded"
-                                />
-                                <span className="text-zinc-300">
-                                  {indicator.code} - {indicator.name}
-                                </span>
-                              </label>
-                            ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowNewIndicatorModal(false);
-                  setEditingIndicator(null);
-                  resetNewIndicatorForm();
-                }}
-                className="px-4 py-2 text-zinc-400 hover:text-zinc-100"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={editingIndicator ? handleUpdateIndicator : handleCreateIndicator}
-                disabled={
-                  editingIndicator
-                    ? !editingIndicator.name || (editingIndicator.type === 'calculated' && editingIndicator.source_ids.length === 0)
-                    : !newIndicator.name || (newIndicator.type === 'calculated' && newIndicator.source_ids.length === 0)
-                }
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {editingIndicator ? 'Salvar' : 'Criar Indicador'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
