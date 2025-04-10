@@ -91,57 +91,40 @@ export const DREConfig = () => {
 
   const fetchAccounts = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('dre_config_accounts')
-        .select('*')
-        .eq('company_id', selectedCompanyId)
-        .order('display_order');
+        .select(`
+          *,
+          dre_config_account_companies!inner (
+            company_id
+          )
+        `);
+
+      if (selectedCompanyId) {
+        query = query.eq('dre_config_account_companies.company_id', selectedCompanyId);
+      }
+
+      const { data, error } = await query.order('display_order');
 
       if (error) throw error;
-      setAccounts(data || []);
+      
+      // Remove duplicate accounts due to company join
+      const uniqueAccounts = data.reduce((acc: DREConfigAccount[], curr) => {
+        if (!acc.find(a => a.id === curr.id)) {
+          acc.push(curr);
+        }
+        return acc;
+      }, []);
+
+      setAccounts(uniqueAccounts || []);
     } catch (err) {
       console.error('Erro ao carregar contas:', err);
       setError('Erro ao carregar contas');
     }
   };
 
-  const handleSaveAccount = async (account: DREConfigAccount) => {
-    try {
-      const accountData = {
-        name: account.name,
-        type: account.type,
-        company_id: selectedCompanyId,
-        category_ids: account.categoryIds,
-        indicator_id: account.indicatorId,
-        selected_accounts: account.selectedAccounts,
-        parent_account_id: account.parentAccountId,
-        is_active: account.isActive,
-        sign: account.sign,
-        display_order: account.displayOrder
-      };
-
-      if (editingAccount) {
-        const { error } = await supabase
-          .from('dre_config_accounts')
-          .update(accountData)
-          .eq('id', editingAccount.id);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('dre_config_accounts')
-          .insert([accountData]);
-
-        if (error) throw error;
-      }
-
-      setShowNewAccountModal(false);
-      setEditingAccount(null);
-      fetchAccounts();
-    } catch (err) {
-      console.error('Erro ao salvar conta:', err);
-      setError('Erro ao salvar conta');
-    }
+  const handleSaveAccount = (account: DREConfigAccount) => {
+    fetchAccounts();
   };
 
   const handleDeleteAccount = async (accountId: string) => {

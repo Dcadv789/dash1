@@ -10,6 +10,7 @@ interface DREConfigAccountModalProps {
   onClose: () => void;
   editingAccount: DREConfigAccount | null;
   onSave: (account: DREConfigAccount) => void;
+  selectedCompanyId: string;
   categories: Category[];
   indicators: Indicator[];
   parentAccounts: DREConfigAccount[];
@@ -20,6 +21,7 @@ export const DREConfigAccountModal = ({
   onClose,
   editingAccount,
   onSave,
+  selectedCompanyId,
   categories,
   indicators,
   parentAccounts
@@ -114,11 +116,12 @@ export const DREConfigAccountModal = ({
         selected_accounts: accountType === 'total' ? selectedAccounts : null,
         parent_account_id: selectedParentAccount,
         is_active: true,
-        sign: accountType === 'flex' ? blankAccountSign : null
+        sign: accountType === 'flex' ? blankAccountSign : null,
+        display_order: 0 // A ordem será ajustada automaticamente pelo backend
       };
 
       let accountId;
-      if (editingAccount) {
+      if (editingAccount?.id) {
         const { data, error } = await supabase
           .from('dre_config_accounts')
           .update(accountData)
@@ -163,9 +166,9 @@ export const DREConfigAccountModal = ({
         }
       }
 
+      onSave(accountData as DREConfigAccount);
       onClose();
       resetForm();
-      window.location.reload(); // Recarrega a página para atualizar os dados
     } catch (err) {
       console.error('Erro ao salvar conta:', err);
     }
@@ -457,6 +460,7 @@ export const DREConfigAccountModal = ({
               onClick={handleSave}
               disabled={!accountName || (accountType === 'category' && selectedCategories.length === 0) || (accountType === 'indicator' && !selectedIndicator) || (accountType === 'total' && selectedAccounts.length === 0)}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            
             >
               {editingAccount ? 'Salvar' : 'Adicionar'}
             </button>
