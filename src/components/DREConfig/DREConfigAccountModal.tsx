@@ -38,6 +38,7 @@ export const DREConfigAccountModal = ({
   const [blankAccountSign, setBlankAccountSign] = useState<'positive' | 'negative'>('positive');
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
+  const [accountId, setAccountId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchCompanies();
@@ -53,6 +54,7 @@ export const DREConfigAccountModal = ({
       setSelectedAccounts(editingAccount.selectedAccounts || []);
       setSelectedParentAccount(editingAccount.parentAccountId || null);
       setBlankAccountSign(editingAccount.sign || 'positive');
+      setAccountId(editingAccount.id);
       
       if (editingAccount.id) {
         fetchSelectedCompanies(editingAccount.id);
@@ -104,6 +106,7 @@ export const DREConfigAccountModal = ({
     setIndicatorSearch('');
     setBlankAccountSign('positive');
     setSelectedCompanies([]);
+    setAccountId(null);
   };
 
   const handleSave = async () => {
@@ -120,7 +123,7 @@ export const DREConfigAccountModal = ({
         display_order: 0 // A ordem será ajustada automaticamente pelo backend
       };
 
-      let accountId;
+      let newAccountId;
       if (editingAccount?.id) {
         const { data, error } = await supabase
           .from('dre_config_accounts')
@@ -130,7 +133,7 @@ export const DREConfigAccountModal = ({
           .single();
 
         if (error) throw error;
-        accountId = editingAccount.id;
+        newAccountId = editingAccount.id;
       } else {
         const { data, error } = await supabase
           .from('dre_config_accounts')
@@ -139,38 +142,47 @@ export const DREConfigAccountModal = ({
           .single();
 
         if (error) throw error;
-        accountId = data.id;
-      }
-
-      // Atualizar relações com empresas
-      if (accountId) {
-        // Primeiro, remove todas as relações existentes
-        await supabase
-          .from('dre_config_account_companies')
-          .delete()
-          .eq('account_id', accountId);
-
-        // Depois, insere as novas relações
-        if (selectedCompanies.length > 0) {
-          const companyRelations = selectedCompanies.map(companyId => ({
-            account_id: accountId,
-            company_id: companyId,
-            is_active: true
-          }));
-
-          const { error } = await supabase
-            .from('dre_config_account_companies')
-            .insert(companyRelations);
-
-          if (error) throw error;
-        }
+        newAccountId = data.id;
+        setAccountId(data.id);
       }
 
       onSave(accountData as DREConfigAccount);
-      onClose();
-      resetForm();
     } catch (err) {
       console.error('Erro ao salvar conta:', err);
+    }
+  };
+
+  const handleToggleCompany = async (companyId: string) => {
+    if (!accountId) return;
+
+    try {
+      const isSelected = selectedCompanies.includes(companyId);
+
+      if (isSelected) {
+        // Remove a relação
+        const { error } = await supabase
+          .from('dre_config_account_companies')
+          .delete()
+          .eq('account_id', accountId)
+          .eq('company_id', companyId);
+
+        if (error) throw error;
+        setSelectedCompanies(selectedCompanies.filter(id => id !== companyId));
+      } else {
+        // Adiciona nova relação
+        const { error } = await supabase
+          .from('dre_config_account_companies')
+          .insert({
+            account_id: accountId,
+            company_id: companyId,
+            is_active: true
+          });
+
+        if (error) throw error;
+        setSelectedCompanies([...selectedCompanies, companyId]);
+      }
+    } catch (err) {
+      console.error('Erro ao atualizar empresas:', err);
     }
   };
 
@@ -424,32 +436,7 @@ export const DREConfigAccountModal = ({
             </select>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-2">
-              Empresas
-            </label>
-            <div className="space-y-2 max-h-40 overflow-y-auto p-2 bg-zinc-800/50 rounded-lg">
-              {companies.map(company => (
-                <label key={company.id} className="flex items-center gap-2 p-2 hover:bg-zinc-800 rounded-lg">
-                  <input
-                    type="checkbox"
-                    checked={selectedCompanies.includes(company.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedCompanies([...selectedCompanies, company.id]);
-                      } else {
-                        setSelectedCompanies(selectedCompanies.filter(id => id !== company.id));
-                      }
-                    }}
-                    className="text-blue-600"
-                  />
-                  <span className="text-zinc-300">{company.trading_name} - {company.name}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 mt-6">
+          <div className="flex justify-end gap-2">
             <button
               onClick={onClose}
               className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-zinc-300"
@@ -460,11 +447,33 @@ export const DREConfigAccountModal = ({
               onClick={handleSave}
               disabled={!accountName || (accountType === 'category' && selectedCategories.length === 0) || (accountType === 'indicator' && !selectedIndicator) || (accountType === 'total' && selectedAccounts.length === 0)}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            
             >
               {editingAccount ? 'Salvar' : 'Adicionar'}
             </button>
           </div>
+
+          {accountId && (
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-2">
+                Empresas
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {companies.map(company => (
+                  <button
+                    key={company.id}
+                    onClick={() => handleToggleCompany(company.id)}
+                    className={`px-2 py-1 rounded text-xs transition-colors ${
+                      selectedCompanies.includes(company.id)
+                        ? 'bg-green-500/20 text-green-400'
+                        : 'bg-zinc-700/50 text-zinc-400'
+                    }`}
+                  >
+                    {company.trading_name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

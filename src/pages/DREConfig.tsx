@@ -36,9 +36,7 @@ export const DREConfig = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedCompanyId) {
-      fetchAccounts();
-    }
+    fetchAccounts();
   }, [selectedCompanyId]);
 
   const fetchCompanies = async () => {
@@ -236,10 +234,10 @@ export const DREConfig = () => {
       )}
 
       <div className="bg-zinc-900 rounded-xl p-8 mb-8">
-        <div className="flex flex-col md:flex-row gap-6">
-          <div className="flex-1">
+        <div className="flex items-center gap-6">
+          <div className="w-64">
             <label className="block text-sm font-medium text-zinc-400 mb-2">
-              Filtrar por Empresa
+              Empresa
             </label>
             <select
               value={selectedCompanyId}
@@ -249,13 +247,13 @@ export const DREConfig = () => {
               <option value="">Todas as empresas</option>
               {companies.map(company => (
                 <option key={company.id} value={company.id}>
-                  {company.trading_name} - {company.name}
+                  {company.trading_name}
                 </option>
               ))}
             </select>
           </div>
 
-          <div className="md:w-72">
+          <div className="flex-1">
             <label className="block text-sm font-medium text-zinc-400 mb-2">
               Tipo de Conta
             </label>
