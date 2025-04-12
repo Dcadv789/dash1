@@ -7,14 +7,15 @@ import { Category, Indicator } from '../types/financial';
 import { DREConfigAccount } from '../types/DREConfig';
 import { supabase } from '../lib/supabase';
 
-type AccountType = 'all' | 'revenue' | 'expense' | 'total' | 'flex';
+type AccountType = 'all' | 'revenue' | 'expense' | 'total' | 'flex' | 'calculated';
 
 const TYPE_LABELS = {
   all: 'Todos',
   revenue: 'Receita',
   expense: 'Despesa',
   total: 'Totalizador',
-  flex: 'Flexível'
+  flex: 'Flexível',
+  calculated: 'Calculado'
 };
 
 export const DREConfig = () => {
@@ -93,23 +94,29 @@ export const DREConfig = () => {
         .from('dre_config_accounts')
         .select(`
           *,
-          dre_config_account_companies!inner (
+          dre_config_account_companies (
             company_id
           )
-        `);
+        `)
+        .order('display_order');
 
       if (selectedCompanyId) {
         query = query.eq('dre_config_account_companies.company_id', selectedCompanyId);
       }
 
-      const { data, error } = await query.order('display_order');
+      const { data, error } = await query;
 
       if (error) throw error;
-      
-      // Remove duplicate accounts due to company join
+
+      // Remover duplicatas e manter apenas contas únicas
       const uniqueAccounts = data.reduce((acc: DREConfigAccount[], curr) => {
-        if (!acc.find(a => a.id === curr.id)) {
-          acc.push(curr);
+        const existingAccount = acc.find(a => a.id === curr.id);
+        if (!existingAccount) {
+          // Adicionar a conta apenas se ela não existir ainda
+          acc.push({
+            ...curr,
+            isExpanded: false // Inicializar o estado de expansão
+          });
         }
         return acc;
       }, []);
@@ -211,6 +218,11 @@ export const DREConfig = () => {
     );
   }
 
+  const filteredAccounts = accounts
+    .filter(acc => !acc.parentAccountId)
+    .filter(acc => selectedType === 'all' || acc.type === selectedType)
+    .sort((a, b) => a.displayOrder - b.displayOrder);
+
   return (
     <div className="max-w-6xl mx-auto py-8">
       <div className="flex justify-between items-center mb-6">
@@ -288,27 +300,23 @@ export const DREConfig = () => {
               </tr>
             </thead>
             <tbody>
-              {accounts
-                .filter(acc => !acc.parentAccountId)
-                .filter(acc => selectedType === 'all' || acc.type === selectedType)
-                .sort((a, b) => a.displayOrder - b.displayOrder)
-                .map(account => (
-                  <DREConfigAccountRow
-                    key={account.id}
-                    account={account}
-                    level={0}
-                    onToggleExpansion={(id) => {
-                      setAccounts(accounts.map(acc =>
-                        acc.id === id ? { ...acc, isExpanded: !acc.isExpanded } : acc
-                      ));
-                    }}
-                    onToggleStatus={toggleAccountStatus}
-                    onStartEditing={setEditingAccount}
-                    onMoveAccount={handleMoveAccount}
-                    onDelete={handleDeleteAccount}
-                    childAccounts={getChildAccounts(account.id)}
-                  />
-                ))}
+              {filteredAccounts.map(account => (
+                <DREConfigAccountRow
+                  key={account.id}
+                  account={account}
+                  level={0}
+                  onToggleExpansion={(id) => {
+                    setAccounts(accounts.map(acc =>
+                      acc.id === id ? { ...acc, isExpanded: !acc.isExpanded } : acc
+                    ));
+                  }}
+                  onToggleStatus={toggleAccountStatus}
+                  onStartEditing={setEditingAccount}
+                  onMoveAccount={handleMoveAccount}
+                  onDelete={handleDeleteAccount}
+                  childAccounts={getChildAccounts(account.id)}
+                />
+              ))}
             </tbody>
           </table>
         </div>
