@@ -26,7 +26,7 @@ export const DREConfigAccountModal = ({
   indicators,
   parentAccounts
 }: DREConfigAccountModalProps) => {
-  const [accountType, setAccountType] = useState<'category' | 'indicator' | 'total' | 'flex'>('category');
+  const [accountType, setAccountType] = useState<'category' | 'calculated' | 'total' | 'flex'>('category');
   const [categoryType, setCategoryType] = useState<'revenue' | 'expense'>('revenue');
   const [accountName, setAccountName] = useState('');
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -115,7 +115,7 @@ export const DREConfigAccountModal = ({
         name: accountName,
         type: accountType === 'category' ? categoryType : accountType,
         category_ids: accountType === 'category' ? selectedCategories : null,
-        indicator_id: accountType === 'indicator' ? selectedIndicator : null,
+        indicator_id: accountType === 'calculated' ? selectedIndicator : null,
         selected_accounts: accountType === 'total' ? selectedAccounts : null,
         parent_account_id: selectedParentAccount,
         is_active: true,
@@ -234,8 +234,8 @@ export const DREConfigAccountModal = ({
               <label className="flex items-center gap-2">
                 <input
                   type="radio"
-                  checked={accountType === 'indicator'}
-                  onChange={() => setAccountType('indicator')}
+                  checked={accountType === 'calculated'}
+                  onChange={() => setAccountType('calculated')}
                   className="text-blue-600"
                 />
                 <span className="text-zinc-300">Indicador</span>
@@ -326,7 +326,7 @@ export const DREConfigAccountModal = ({
             </div>
           )}
 
-          {accountType === 'indicator' && (
+          {accountType === 'calculated' && (
             <div>
               <label className="block text-sm font-medium text-zinc-400 mb-2">
                 Indicador
@@ -445,7 +445,7 @@ export const DREConfigAccountModal = ({
             </button>
             <button
               onClick={handleSave}
-              disabled={!accountName || (accountType === 'category' && selectedCategories.length === 0) || (accountType === 'indicator' && !selectedIndicator) || (accountType === 'total' && selectedAccounts.length === 0)}
+              disabled={!accountName || (accountType === 'category' && selectedCategories.length === 0) || (accountType === 'calculated' && !selectedIndicator) || (accountType === 'total' && selectedAccounts.length === 0)}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {editingAccount ? 'Salvar' : 'Adicionar'}
