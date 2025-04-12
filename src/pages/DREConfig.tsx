@@ -7,15 +7,14 @@ import { Category, Indicator } from '../types/financial';
 import { DREConfigAccount } from '../types/DREConfig';
 import { supabase } from '../lib/supabase';
 
-type AccountType = 'all' | 'revenue' | 'expense' | 'total' | 'flex' | 'calculated';
+type AccountType = 'all' | 'revenue' | 'expense' | 'total' | 'flex';
 
 const TYPE_LABELS = {
   all: 'Todos',
   revenue: 'Receita',
   expense: 'Despesa',
   total: 'Totalizador',
-  flex: 'Flexível',
-  calculated: 'Calculado'
+  flex: 'Flexível'
 };
 
 export const DREConfig = () => {
@@ -29,6 +28,7 @@ export const DREConfig = () => {
   const [editingAccount, setEditingAccount] = useState<DREConfigAccount | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [indicators, setIndicators] = useState<Indicator[]>([]);
+  const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchCompanies();
@@ -37,7 +37,9 @@ export const DREConfig = () => {
   }, []);
 
   useEffect(() => {
-    fetchAccounts();
+    if (selectedCompanyId) {
+      fetchAccounts();
+    }
   }, [selectedCompanyId]);
 
   const fetchCompanies = async () => {
@@ -100,36 +102,80 @@ export const DREConfig = () => {
         `)
         .order('display_order');
 
-      if (selectedCompanyId) {
-        query = query.eq('dre_config_account_companies.company_id', selectedCompanyId);
-      }
-
       const { data, error } = await query;
 
       if (error) throw error;
 
-      // Remover duplicatas e manter apenas contas únicas
-      const uniqueAccounts = data.reduce((acc: DREConfigAccount[], curr) => {
-        const existingAccount = acc.find(a => a.id === curr.id);
-        if (!existingAccount) {
-          // Adicionar a conta apenas se ela não existir ainda
-          acc.push({
-            ...curr,
-            isExpanded: false // Inicializar o estado de expansão
-          });
-        }
-        return acc;
-      }, []);
+      const accountsWithExpansion = (data || []).map(account => ({
+        ...account,
+        isExpanded: expandedAccounts.has(account.id)
+      }));
 
-      setAccounts(uniqueAccounts || []);
+      setAccounts(accountsWithExpansion);
     } catch (err) {
       console.error('Erro ao carregar contas:', err);
       setError('Erro ao carregar contas');
     }
   };
 
-  const handleSaveAccount = (account: DREConfigAccount) => {
-    fetchAccounts();
+  const handleSaveAccount = async (accountData: DREConfigAccount) => {
+    try {
+      let data;
+      if (editingAccount?.id) {
+        const { data: updatedAccount, error } = await supabase
+          .from('dre_config_accounts')
+          .update({
+            name: accountData.name,
+            type: accountData.type,
+            category_ids: accountData.categoryIds,
+            indicator_id: accountData.indicatorId,
+            selected_accounts: accountData.selectedAccounts,
+            parent_account_id: accountData.parentAccountId,
+            sign: accountData.sign
+          })
+          .eq('id', editingAccount.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        data = updatedAccount;
+      } else {
+        const { data: newAccount, error } = await supabase
+          .from('dre_config_accounts')
+          .insert([{
+            name: accountData.name,
+            type: accountData.type,
+            category_ids: accountData.categoryIds,
+            indicator_id: accountData.indicatorId,
+            selected_accounts: accountData.selectedAccounts,
+            parent_account_id: accountData.parentAccountId,
+            sign: accountData.sign,
+            display_order: accounts.length
+          }])
+          .select()
+          .single();
+
+        if (error) throw error;
+        data = newAccount;
+      }
+
+      if (data && selectedCompanyId) {
+        await supabase
+          .from('dre_config_account_companies')
+          .upsert({
+            account_id: data.id,
+            company_id: selectedCompanyId,
+            is_active: true
+          });
+      }
+
+      setShowNewAccountModal(false);
+      setEditingAccount(null);
+      fetchAccounts();
+    } catch (err) {
+      console.error('Erro ao salvar conta:', err);
+      setError('Erro ao salvar conta');
+    }
   };
 
   const handleDeleteAccount = async (accountId: string) => {
@@ -206,6 +252,18 @@ export const DREConfig = () => {
       console.error('Erro ao atualizar status:', err);
       setError('Erro ao atualizar status da conta');
     }
+  };
+
+  const toggleAccountExpansion = (accountId: string) => {
+    setExpandedAccounts(prev => {
+      const next = new Set(prev);
+      if (next.has(accountId)) {
+        next.delete(accountId);
+      } else {
+        next.add(accountId);
+      }
+      return next;
+    });
   };
 
   if (loading) {
@@ -305,11 +363,7 @@ export const DREConfig = () => {
                   key={account.id}
                   account={account}
                   level={0}
-                  onToggleExpansion={(id) => {
-                    setAccounts(accounts.map(acc =>
-                      acc.id === id ? { ...acc, isExpanded: !acc.isExpanded } : acc
-                    ));
-                  }}
+                  onToggleExpansion={toggleAccountExpansion}
                   onToggleStatus={toggleAccountStatus}
                   onStartEditing={setEditingAccount}
                   onMoveAccount={handleMoveAccount}

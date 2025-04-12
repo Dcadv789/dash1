@@ -2,7 +2,7 @@ export interface DREConfigAccount {
   id: string;
   code: string;
   name: string;
-  type: 'revenue' | 'expense' | 'total' | 'calculated' | 'flex';
+  type: 'revenue' | 'expense' | 'total' | 'flex';
   displayOrder: number;
   companyId: string;
   isEditing?: boolean;
