@@ -6,6 +6,7 @@ interface DreConta {
   id: string;
   nome: string;
   tipo: 'simples' | 'composta' | 'formula' | 'indicador' | 'soma_indicadores';
+  simbolo: '+' | '-' | '=' | null;
   expressao?: string;
   ordem_padrao: number;
   visivel: boolean;
@@ -25,6 +26,19 @@ interface Referencia {
   nome: string;
   codigo?: string;
 }
+
+const OPERATION_LABELS = {
+  sum: 'Soma',
+  subtract: 'Subtração',
+  multiply: 'Multiplicação',
+  divide: 'Divisão'
+};
+
+const SIMBOLOS = [
+  { value: '+', label: '+ (Receita)', color: 'text-green-400' },
+  { value: '-', label: '- (Despesa)', color: 'text-red-400' },
+  { value: '=', label: '= (Resultado)', color: 'text-blue-400' }
+];
 
 export const DreModelConfig = () => {
   const [contas, setContas] = useState<DreConta[]>([]);
@@ -47,6 +61,7 @@ export const DreModelConfig = () => {
   const [formData, setFormData] = useState({
     nome: '',
     tipo: 'simples' as DreConta['tipo'],
+    simbolo: '+' as '+' | '-' | '=' | null,
     expressao: '',
     ordem_padrao: 0,
     visivel: true
@@ -240,6 +255,7 @@ export const DreModelConfig = () => {
     setFormData({
       nome: '',
       tipo: 'simples',
+      simbolo: '+',
       expressao: '',
       ordem_padrao: 0,
       visivel: true
@@ -322,6 +338,7 @@ export const DreModelConfig = () => {
                         setFormData({
                           nome: conta.nome,
                           tipo: conta.tipo,
+                          simbolo: conta.simbolo,
                           expressao: conta.expressao || '',
                           ordem_padrao: conta.ordem_padrao,
                           visivel: conta.visivel
@@ -475,6 +492,24 @@ export const DreModelConfig = () => {
                   <option value="formula">Fórmula</option>
                   <option value="indicador">Indicador</option>
                   <option value="soma_indicadores">Soma de Indicadores</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1">
+                  Símbolo
+                </label>
+                <select
+                  value={formData.simbolo || ''}
+                  onChange={(e) => setFormData({ ...formData, simbolo: e.target.value as '+' | '-' | '=' | null })}
+                  className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
+                >
+                  <option value="">Selecione um símbolo</option>
+                  {SIMBOLOS.map(simbolo => (
+                    <option key={simbolo.value} value={simbolo.value} className={simbolo.color}>
+                      {simbolo.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
