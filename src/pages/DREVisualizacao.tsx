@@ -44,7 +44,7 @@ export const DREVisualizacao = () => {
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState<string>(MONTHS[new Date().getMonth()]);
   const [dreData, setDreData] = useState<DREData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<SystemUser | null>(null);
   const { user } = useAuth();
@@ -190,11 +190,11 @@ export const DREVisualizacao = () => {
     });
   };
 
-  if (loading) {
+  if (!currentUser) {
     return (
       <div className="max-w-7xl mx-auto py-8">
         <div className="bg-zinc-900 rounded-xl p-8 text-center">
-          <p className="text-zinc-400">Carregando dados do DRE...</p>
+          <p className="text-zinc-400">Carregando dados do usuário...</p>
         </div>
       </div>
     );
@@ -280,6 +280,14 @@ export const DREVisualizacao = () => {
       {error ? (
         <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">
           <p className="text-red-400">{error}</p>
+        </div>
+      ) : loading ? (
+        <div className="bg-zinc-900 rounded-xl p-8 text-center">
+          <p className="text-zinc-400">Carregando dados do DRE...</p>
+        </div>
+      ) : !selectedCompanyId ? (
+        <div className="bg-zinc-900 rounded-xl p-8 text-center">
+          <p className="text-zinc-400">Selecione uma empresa para visualizar o DRE</p>
         </div>
       ) : (
         <div className="bg-zinc-900 rounded-xl overflow-hidden">
