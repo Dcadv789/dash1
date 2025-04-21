@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bell, Settings, Users, Building, ChevronRight } from 'lucide-react';
+import { Bell, Settings, Users, Building, ChevronRight, X, Check, Lock } from 'lucide-react';
 import { UserDropdown } from './UserDropdown';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
@@ -101,6 +101,16 @@ export const Topbar = () => {
                       className="w-full px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 text-left"
                     >
                       DRE Config
+                    </button>
+                    <button
+                      onClick={() => {
+                        navigate('/empresas-contas-dre');
+                        setIsSettingsOpen(false);
+                        setIsFinanceOpen(false);
+                      }}
+                      className="w-full px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 text-left"
+                    >
+                      DRE por Empresa
                     </button>
                   </div>
                 )}
