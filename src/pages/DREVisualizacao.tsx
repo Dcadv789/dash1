@@ -12,6 +12,7 @@ interface DREAccount {
   id: string;
   nome: string;
   tipo: 'simples' | 'composta' | 'formula' | 'indicador' | 'soma_indicadores';
+  simbolo: '+' | '-' | '=' | null;
   ordem_padrao: number;
   visivel: boolean;
 }
@@ -21,9 +22,11 @@ interface DREData {
   name: string;
   value: number;
   type: string;
+  symbol: string;
   order: number;
   isExpanded?: boolean;
   children?: DREData[];
+  monthlyValues: { [key: string]: number };
 }
 
 interface SystemUser {
@@ -103,10 +106,35 @@ export const DREVisualizacao = () => {
     }
   };
 
+  const getLast12Months = () => {
+    const months = [];
+    const currentMonthIndex = MONTHS.indexOf(selectedMonth);
+    const currentYear = selectedYear;
+
+    for (let i = 11; i >= 0; i--) {
+      let monthIndex = currentMonthIndex - i;
+      let year = currentYear;
+
+      if (monthIndex < 0) {
+        monthIndex += 12;
+        year--;
+      }
+
+      months.push({
+        month: MONTHS[monthIndex],
+        year: year
+      });
+    }
+
+    return months;
+  };
+
   const fetchDREData = async () => {
     try {
       setLoading(true);
       setError(null);
+
+      const months = getLast12Months();
 
       // Buscar contas do DRE
       const { data: accounts, error: accountsError } = await supabase
@@ -117,23 +145,52 @@ export const DREVisualizacao = () => {
 
       if (accountsError) throw accountsError;
 
-      // Buscar dados brutos para o período selecionado
-      const { data: rawData, error: rawDataError } = await supabase
-        .from('dados_brutos')
-        .select(`
-          id,
-          categoria_id,
-          indicador_id,
-          valor
-        `)
-        .eq('empresa_id', selectedCompanyId)
-        .eq('ano', selectedYear)
-        .eq('mes', selectedMonth);
+      // Buscar dados brutos para os últimos 12 meses
+      const monthlyData = await Promise.all(
+        months.map(async ({ month, year }) => {
+          const { data, error } = await supabase
+            .from('dados_brutos')
+            .select(`
+              id,
+              categoria_id,
+              indicador_id,
+              valor,
+              mes,
+              ano
+            `)
+            .eq('empresa_id', selectedCompanyId)
+            .eq('ano', year)
+            .eq('mes', month);
 
-      if (rawDataError) throw rawDataError;
+          if (error) throw error;
+          return { month, year, data: data || [] };
+        })
+      );
 
       // Processar os dados
-      const processedData = await processAccountsData(accounts || [], rawData || []);
+      const processedData = accounts?.map(account => {
+        const monthlyValues: { [key: string]: number } = {};
+        let totalValue = 0;
+
+        monthlyData.forEach(({ month, year, data }) => {
+          const monthKey = `${month}-${year}`;
+          const value = calculateAccountValue(account, data);
+          monthlyValues[monthKey] = value;
+          totalValue += value;
+        });
+
+        return {
+          accountId: account.id,
+          name: account.nome,
+          symbol: account.simbolo || '=',
+          type: account.tipo,
+          order: account.ordem_padrao,
+          monthlyValues,
+          value: totalValue,
+          isExpanded: true
+        };
+      }) || [];
+
       setDreData(processedData);
     } catch (err) {
       console.error('Erro ao carregar dados do DRE:', err);
@@ -143,41 +200,12 @@ export const DREVisualizacao = () => {
     }
   };
 
-  const processAccountsData = async (accounts: DREAccount[], rawData: any[]) => {
-    const processedData: DREData[] = [];
-
-    for (const account of accounts) {
-      const value = calculateAccountValue(account, rawData);
-      
-      processedData.push({
-        accountId: account.id,
-        name: account.nome,
-        value,
-        type: account.tipo,
-        order: account.ordem_padrao,
-        isExpanded: true
-      });
-    }
-
-    return processedData;
-  };
-
   const calculateAccountValue = (account: DREAccount, rawData: any[]): number => {
-    // Implementar lógica de cálculo baseada no tipo da conta
     switch (account.tipo) {
       case 'simples':
         return rawData.reduce((sum, data) => sum + (data.valor || 0), 0);
       case 'composta':
-        // Implementar lógica para contas compostas
-        return 0;
-      case 'formula':
-        // Implementar lógica para fórmulas
-        return 0;
-      case 'indicador':
-        return rawData.find(data => data.indicador_id === account.id)?.valor || 0;
-      case 'soma_indicadores':
-        // Implementar lógica para soma de indicadores
-        return 0;
+        return rawData.reduce((sum, data) => sum - (data.valor || 0), 0);
       default:
         return 0;
     }
@@ -190,6 +218,12 @@ export const DREVisualizacao = () => {
     });
   };
 
+  const getValueColor = (value: number, symbol: string) => {
+    if (symbol === '+') return 'text-green-400';
+    if (symbol === '-') return 'text-red-400';
+    return value >= 0 ? 'text-green-400' : 'text-red-400';
+  };
+
   if (!currentUser) {
     return (
       <div className="max-w-7xl mx-auto py-8">
@@ -199,6 +233,8 @@ export const DREVisualizacao = () => {
       </div>
     );
   }
+
+  const months = getLast12Months();
 
   return (
     <div className="max-w-7xl mx-auto py-8">
@@ -298,8 +334,13 @@ export const DREVisualizacao = () => {
                   <th className="px-6 py-4 text-left text-sm font-semibold text-zinc-400">
                     Conta
                   </th>
+                  {months.map(({ month, year }) => (
+                    <th key={`${month}-${year}`} className="px-4 py-4 text-right text-sm font-semibold text-zinc-400">
+                      {`${month}/${year}`}
+                    </th>
+                  ))}
                   <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-400">
-                    Valor
+                    Acumulado
                   </th>
                 </tr>
               </thead>
@@ -308,33 +349,24 @@ export const DREVisualizacao = () => {
                   <tr key={item.accountId} className="border-b border-zinc-800">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        {item.children ? (
-                          <button
-                            onClick={() => {
-                              setDreData(dreData.map(d => 
-                                d.accountId === item.accountId 
-                                  ? { ...d, isExpanded: !d.isExpanded }
-                                  : d
-                              ));
-                            }}
-                            className="p-1 hover:bg-zinc-800 rounded transition-colors"
-                          >
-                            {item.isExpanded ? (
-                              <ChevronDown size={16} className="text-zinc-400" />
-                            ) : (
-                              <ChevronRight size={16} className="text-zinc-400" />
-                            )}
-                          </button>
-                        ) : (
-                          <span className="w-6" />
-                        )}
+                        <span className={getValueColor(item.value, item.symbol)}>
+                          {item.symbol}
+                        </span>
                         <span className="text-zinc-300">{item.name}</span>
                       </div>
                     </td>
+                    {months.map(({ month, year }) => {
+                      const value = item.monthlyValues[`${month}-${year}`] || 0;
+                      return (
+                        <td key={`${month}-${year}`} className="px-4 py-4 text-right">
+                          <span className={getValueColor(value, item.symbol)}>
+                            {formatCurrency(value)}
+                          </span>
+                        </td>
+                      );
+                    })}
                     <td className="px-6 py-4 text-right">
-                      <span className={`${
-                        item.value < 0 ? 'text-red-400' : 'text-green-400'
-                      }`}>
+                      <span className={getValueColor(item.value, item.symbol)}>
                         {formatCurrency(item.value)}
                       </span>
                     </td>
