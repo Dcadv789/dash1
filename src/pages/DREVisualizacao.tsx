@@ -36,6 +36,13 @@ interface SystemUser {
   has_all_companies_access: boolean;
 }
 
+interface RawData {
+  valor: number;
+  category?: {
+    type: 'revenue' | 'expense';
+  };
+}
+
 const MONTHS = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
@@ -144,6 +151,27 @@ export const DREVisualizacao = () => {
     return months;
   };
 
+  const calculateAccountValue = (account: DREAccount, rawData: RawData[]): number => {
+    let totalValue = 0;
+
+    rawData.forEach(data => {
+      // Se for receita, mantém positivo
+      if (data.category?.type === 'revenue') {
+        totalValue += data.valor;
+      }
+      // Se for despesa, torna negativo
+      else if (data.category?.type === 'expense') {
+        totalValue -= data.valor;
+      }
+      // Se não tiver categoria (ex: indicador), usa o valor como está
+      else {
+        totalValue += data.valor;
+      }
+    });
+
+    return totalValue;
+  };
+
   const fetchDREData = async () => {
     try {
       setLoading(true);
@@ -171,7 +199,8 @@ export const DREVisualizacao = () => {
               indicador_id,
               valor,
               mes,
-              ano
+              ano,
+              category:categories(type)
             `)
             .eq('empresa_id', selectedCompanyId)
             .eq('ano', year)
@@ -215,17 +244,6 @@ export const DREVisualizacao = () => {
     }
   };
 
-  const calculateAccountValue = (account: DREAccount, rawData: any[]): number => {
-    switch (account.tipo) {
-      case 'simples':
-        return rawData.reduce((sum, data) => sum + (data.valor || 0), 0);
-      case 'composta':
-        return rawData.reduce((sum, data) => sum - (data.valor || 0), 0);
-      default:
-        return 0;
-    }
-  };
-
   const formatCurrency = (value: number) => {
     return value.toLocaleString('pt-BR', {
       style: 'currency',
@@ -234,8 +252,8 @@ export const DREVisualizacao = () => {
   };
 
   const getValueColor = (value: number, symbol: string) => {
-    if (symbol === '+') return 'text-green-400';
-    if (symbol === '-') return 'text-red-400';
+    if (symbol === '+') return value >= 0 ? 'text-green-400' : 'text-red-400';
+    if (symbol === '-') return value <= 0 ? 'text-green-400' : 'text-red-400';
     return value >= 0 ? 'text-green-400' : 'text-red-400';
   };
 
