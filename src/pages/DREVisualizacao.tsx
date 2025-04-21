@@ -41,6 +41,21 @@ const MONTHS = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ];
 
+const MONTH_ABBREVIATIONS: { [key: string]: string } = {
+  'Janeiro': 'Jan',
+  'Fevereiro': 'Fev',
+  'Março': 'Mar',
+  'Abril': 'Abr',
+  'Maio': 'Mai',
+  'Junho': 'Jun',
+  'Julho': 'Jul',
+  'Agosto': 'Ago',
+  'Setembro': 'Set',
+  'Outubro': 'Out',
+  'Novembro': 'Nov',
+  'Dezembro': 'Dez'
+};
+
 export const DREVisualizacao = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
@@ -335,8 +350,8 @@ export const DREVisualizacao = () => {
                     Conta
                   </th>
                   {months.map(({ month, year }) => (
-                    <th key={`${month}-${year}`} className="px-4 py-4 text-right text-sm font-semibold text-zinc-400">
-                      {`${month}/${year}`}
+                    <th key={`${month}-${year}`} className="px-3 py-4 text-right text-sm font-semibold text-zinc-400">
+                      {`${MONTH_ABBREVIATIONS[month]}/${year.toString().slice(2)}`}
                     </th>
                   ))}
                   <th className="px-6 py-4 text-right text-sm font-semibold text-zinc-400">
@@ -358,7 +373,7 @@ export const DREVisualizacao = () => {
                     {months.map(({ month, year }) => {
                       const value = item.monthlyValues[`${month}-${year}`] || 0;
                       return (
-                        <td key={`${month}-${year}`} className="px-4 py-4 text-right">
+                        <td key={`${month}-${year}`} className="px-3 py-4 text-right">
                           <span className={getValueColor(value, item.symbol)}>
                             {formatCurrency(value)}
                           </span>
