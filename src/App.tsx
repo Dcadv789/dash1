@@ -7,7 +7,7 @@ import { Users } from './pages/Users';
 import { Companies } from './pages/Companies';
 import { Categories } from './pages/Categories';
 import { Indicators } from './pages/Indicators';
-import { DREConfig } from './pages/DREConfig';
+import { DreModelConfig } from './pages/DreModelConfig';
 import { Login } from './pages/Login';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -50,7 +50,7 @@ function App() {
           <Route path="/companies" element={<PrivateRoute><Companies /></PrivateRoute>} />
           <Route path="/categories" element={<PrivateRoute><Categories /></PrivateRoute>} />
           <Route path="/indicators" element={<PrivateRoute><Indicators /></PrivateRoute>} />
-          <Route path="/dre" element={<PrivateRoute><DREConfig /></PrivateRoute>} />
+          <Route path="/dre" element={<PrivateRoute><DreModelConfig /></PrivateRoute>} />
           <Route path="/" element={<PrivateRoute>
             <div className="max-w-7xl mx-auto">
               <h1 className="text-3xl font-bold">Bem-vindo ao Sistema</h1>
