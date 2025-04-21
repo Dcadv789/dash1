@@ -37,9 +37,7 @@ export const DREConfig = () => {
   }, []);
 
   useEffect(() => {
-    if (selectedCompanyId) {
-      fetchAccounts();
-    }
+    fetchAccounts();
   }, [selectedCompanyId]);
 
   const fetchCompanies = async () => {
@@ -96,13 +94,16 @@ export const DREConfig = () => {
         .from('dre_config_accounts')
         .select(`
           *,
-          dre_config_account_companies (
+          dre_config_account_companies!inner (
             company_id
           )
-        `)
-        .order('display_order');
+        `);
 
-      const { data, error } = await query;
+      if (selectedCompanyId) {
+        query = query.eq('dre_config_account_companies.company_id', selectedCompanyId);
+      }
+
+      const { data, error } = await query.order('display_order');
 
       if (error) throw error;
 
@@ -119,19 +120,25 @@ export const DREConfig = () => {
   };
 
   const handleSaveAccount = async (accountData: DREConfigAccount) => {
+    if (!selectedCompanyId) {
+      setError('Selecione uma empresa antes de criar ou editar uma conta');
+      return;
+    }
+
     try {
       let data;
       if (editingAccount?.id) {
+        // Atualização de conta existente
         const { data: updatedAccount, error } = await supabase
           .from('dre_config_accounts')
           .update({
             name: accountData.name,
             type: accountData.type,
-            category_ids: accountData.categoryIds,
-            indicator_id: accountData.indicatorId,
-            selected_accounts: accountData.selectedAccounts,
-            parent_account_id: accountData.parentAccountId,
-            sign: accountData.sign
+            category_ids: accountData.categoryIds || null,
+            indicator_id: accountData.indicatorId || null,
+            selected_accounts: accountData.selectedAccounts || null,
+            parent_account_id: accountData.parentAccountId || null,
+            sign: accountData.sign || null
           })
           .eq('id', editingAccount.id)
           .select()
@@ -140,52 +147,70 @@ export const DREConfig = () => {
         if (error) throw error;
         data = updatedAccount;
       } else {
-        const { data: newAccount, error } = await supabase
+        // Criação de nova conta
+        const { data: newAccount, error: insertError } = await supabase
           .from('dre_config_accounts')
           .insert([{
             name: accountData.name,
             type: accountData.type,
-            category_ids: accountData.categoryIds,
-            indicator_id: accountData.indicatorId,
-            selected_accounts: accountData.selectedAccounts,
-            parent_account_id: accountData.parentAccountId,
-            sign: accountData.sign,
-            display_order: accounts.length
+            category_ids: accountData.categoryIds || null,
+            indicator_id: accountData.indicatorId || null,
+            selected_accounts: accountData.selectedAccounts || null,
+            parent_account_id: accountData.parentAccountId || null,
+            sign: accountData.sign || null,
+            display_order: accounts.length,
+            is_active: true
           }])
           .select()
           .single();
 
-        if (error) throw error;
+        if (insertError) throw insertError;
         data = newAccount;
-      }
 
-      if (data && selectedCompanyId) {
-        await supabase
+        // Vincula a conta à empresa
+        const { error: linkError } = await supabase
           .from('dre_config_account_companies')
-          .upsert({
+          .insert({
             account_id: data.id,
             company_id: selectedCompanyId,
             is_active: true
           });
+
+        if (linkError) throw linkError;
       }
 
       setShowNewAccountModal(false);
       setEditingAccount(null);
-      fetchAccounts();
+      setError(null);
+      await fetchAccounts();
     } catch (err) {
       console.error('Erro ao salvar conta:', err);
-      setError('Erro ao salvar conta');
+      setError('Erro ao salvar conta. Verifique se todos os campos estão preenchidos corretamente.');
     }
   };
 
   const handleDeleteAccount = async (accountId: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir esta conta?')) return;
+    if (!window.confirm('Tem certeza que deseja excluir esta conta? Todas as contas filhas também serão excluídas.')) return;
 
     try {
+      // Primeiro, encontramos todas as contas filhas recursivamente
+      const getAllChildrenIds = (parentId: string): string[] => {
+        const children = accounts.filter(acc => acc.parentAccountId === parentId);
+        return children.reduce((acc, child) => [
+          ...acc,
+          child.id,
+          ...getAllChildrenIds(child.id)
+        ], [] as string[]);
+      };
+
+      const childrenIds = getAllChildrenIds(accountId);
+      const allIdsToDelete = [accountId, ...childrenIds];
+
+      // Deletamos todas as contas de uma vez
       const { error } = await supabase
         .from('dre_config_accounts')
         .delete()
-        .eq('id', accountId);
+        .in('id', allIdsToDelete);
 
       if (error) throw error;
       fetchAccounts();
@@ -276,8 +301,11 @@ export const DREConfig = () => {
     );
   }
 
-  const filteredAccounts = accounts
-    .filter(acc => !acc.parentAccountId)
+  // Filtra apenas as contas raiz (sem pai)
+  const rootAccounts = accounts.filter(acc => !acc.parentAccountId);
+
+  // Aplica os filtros selecionados
+  const filteredAccounts = rootAccounts
     .filter(acc => selectedType === 'all' || acc.type === selectedType)
     .sort((a, b) => a.displayOrder - b.displayOrder);
 
@@ -289,7 +317,14 @@ export const DREConfig = () => {
           <p className="text-zinc-400 mt-1">Configuração do Demonstrativo de Resultados</p>
         </div>
         <button
-          onClick={() => setShowNewAccountModal(true)}
+          onClick={() => {
+            if (!selectedCompanyId) {
+              setError('Selecione uma empresa antes de criar uma nova conta');
+              return;
+            }
+            setError(null);
+            setShowNewAccountModal(true);
+          }}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-white flex items-center gap-2"
         >
           <Plus size={20} />
@@ -311,10 +346,13 @@ export const DREConfig = () => {
             </label>
             <select
               value={selectedCompanyId}
-              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              onChange={(e) => {
+                setSelectedCompanyId(e.target.value);
+                setError(null);
+              }}
               className="w-full px-4 py-2 bg-zinc-800 rounded-lg text-zinc-100"
             >
-              <option value="">Todas as empresas</option>
+              <option value="">Selecione uma empresa</option>
               {companies.map(company => (
                 <option key={company.id} value={company.id}>
                   {company.trading_name}
@@ -381,6 +419,7 @@ export const DREConfig = () => {
         onClose={() => {
           setShowNewAccountModal(false);
           setEditingAccount(null);
+          setError(null);
         }}
         editingAccount={editingAccount}
         onSave={handleSaveAccount}
