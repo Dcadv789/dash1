@@ -21,7 +21,7 @@ export const Categories = () => {
   const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [companyCategories, setCompanyCategories] = useState<CompanyCategory[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyFromCompanyId, setCopyFromCompanyId] = useState<string>('');
@@ -79,6 +79,8 @@ export const Categories = () => {
     } catch (err) {
       console.error('Erro ao carregar categorias:', err);
       setError('Erro ao carregar categorias');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -93,8 +95,6 @@ export const Categories = () => {
     } catch (err) {
       console.error('Erro ao carregar categorias das empresas:', err);
       setError('Erro ao carregar categorias das empresas');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -139,7 +139,12 @@ export const Categories = () => {
     try {
       const { data: category, error: categoryError } = await supabase
         .from('categories')
-        .insert([{ name: 'Nova Categoria', type, group_id: groupId }])
+        .insert([{ 
+          name: 'Nova Categoria', 
+          type, 
+          group_id: groupId,
+          value: 0
+        }])
         .select()
         .single();
 
