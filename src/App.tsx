@@ -9,6 +9,7 @@ import { Categories } from './pages/Categories';
 import { Indicators } from './pages/Indicators';
 import { DreModelConfig } from './pages/DreModelConfig';
 import { EmpresasContasDRE } from './pages/EmpresasContasDRE';
+import { RawData } from './pages/RawData';
 import { Login } from './pages/Login';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -51,6 +52,7 @@ function App() {
           <Route path="/companies" element={<PrivateRoute><Companies /></PrivateRoute>} />
           <Route path="/categories" element={<PrivateRoute><Categories /></PrivateRoute>} />
           <Route path="/indicators" element={<PrivateRoute><Indicators /></PrivateRoute>} />
+          <Route path="/raw-data" element={<PrivateRoute><RawData /></PrivateRoute>} />
           <Route path="/dre" element={<PrivateRoute><DreModelConfig /></PrivateRoute>} />
           <Route path="/empresas-contas-dre" element={<PrivateRoute><EmpresasContasDRE /></PrivateRoute>} />
           <Route path="/" element={<PrivateRoute>

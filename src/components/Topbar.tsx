@@ -94,6 +94,16 @@ export const Topbar = () => {
                     </button>
                     <button
                       onClick={() => {
+                        navigate('/raw-data');
+                        setIsSettingsOpen(false);
+                        setIsFinanceOpen(false);
+                      }}
+                      className="w-full px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-700 text-left"
+                    >
+                      Dados Brutos
+                    </button>
+                    <button
+                      onClick={() => {
                         navigate('/dre');
                         setIsSettingsOpen(false);
                         setIsFinanceOpen(false);
@@ -122,4 +132,4 @@ export const Topbar = () => {
       </div>
     </header>
   );
-}
+};
